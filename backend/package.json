@@ -1,0 +1,21 @@
+{
+  "name": "qa-studio-backend",
+  "version": "1.0.0",
+  "description": "Backend seguro para o QA Studio com Claude AI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "otplib": "^13.3.0",
+    "puppeteer": "^22.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^1.0.2"
+  }
+}

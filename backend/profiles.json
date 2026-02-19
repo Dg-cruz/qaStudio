@@ -1,0 +1,30 @@
+{
+  "_comentario": "totpSecret: chave do autenticador. Obtenha em Configurações > 2FA > 'não consigo escanear o QR code'.",
+  "pagol-staging": {
+    "name": "Pagol (Staging)",
+    "loginUrl": "https://back-staging.pagol.luckygaming.com.br/#/login/",
+    "totpSecret": "",
+    "selectors": {
+      "usernameField": "#j_username",
+      "passwordField": "#j_password",
+      "submitButton": "#login_button",
+      "totpField": "#2fa_password",
+      "totpSubmitButton": "#2fa_button"
+    },
+    "waitAfterLogin": 4000
+  },
+
+  "exemplo-sistema-2": {
+    "name": "Meu Sistema 2",
+    "loginUrl": "https://www.bellascestasonline.com/login",
+    "totpSecret": "",
+    "selectors": {
+      "usernameField":    "#input-email",
+      "passwordField":    "#input-password",
+      "submitButton":     "#btn-password",
+      "totpField":        "#otp-code",
+      "successIndicator": ".dashboard-header"
+    },
+    "waitAfterLogin": 3000
+  }
+}

@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QA Studio — Gerador Inteligente</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0b0e14; --surface: #13161f; --surface2: #1a1e2a; --border: #252a38;
+    --accent: #00e5a0; --accent2: #7c5cfc; --accent3: #f7c948; --danger: #ff4f6d;
+    --green: #00b578; --warn: #f59e0b;
+    --text: #e8eaf2; --muted: #6b7290;
+    --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif; --display: 'Syne', sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; }
+  header { z-index: 10; padding: 18px 36px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: rgba(11,14,20,0.92); backdrop-filter: blur(12px); }
+  .logo { font-family: var(--display); font-size: 19px; font-weight: 800; letter-spacing: -.5px; display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 9px; height: 9px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(.85)} }
+  .badge { font-family: var(--mono); font-size: 11px; padding: 3px 10px; background: rgba(0,229,160,.08); border: 1px solid rgba(0,229,160,.25); color: var(--accent); border-radius: 20px; }
+
+  main { flex: 1; display: grid; grid-template-columns: 400px 1fr; min-height: calc(100vh - 62px); }
+
+  /* ── Sidebar ── */
+  .sidebar { border-right: 1px solid var(--border); padding: 22px 20px; display: flex; flex-direction: column; gap: 16px; background: var(--surface); overflow-y: auto; }
+  .slabel { font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .divider { height: 1px; background: var(--border); flex-shrink: 0; }
+  label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 5px; }
+  input, textarea, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 9px; padding: 9px 12px; font-family: var(--sans); font-size: 13px; outline: none; transition: border-color .2s, box-shadow .2s; }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,160,.08); }
+  select option { background: var(--surface2); }
+  textarea { min-height: 85px; resize: vertical; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* URL tabs */
+  .url-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .url-tab { flex: 1; padding: 7px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); text-align: center; transition: all .15s; font-family: var(--display); }
+  .url-tab:hover { color: var(--text); }
+  .url-tab.active { background: rgba(0,229,160,.08); border-color: var(--accent); color: var(--accent); }
+  .url-tab.active-auth { background: rgba(245,158,11,.08); border-color: var(--warn); color: var(--warn); }
+
+  /* URL panels */
+  .url-panel { display: none; flex-direction: column; gap: 10px; }
+  .url-panel.visible { display: flex; }
+
+  /* URL input with button */
+  .url-wrap { position: relative; }
+  .url-wrap input { padding-right: 84px; font-family: var(--mono); font-size: 12px; }
+  .btn-analyze { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); padding: 5px 10px; background: rgba(0,229,160,.1); border: 1px solid rgba(0,229,160,.3); color: var(--accent); border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: var(--display); transition: background .15s; }
+  .btn-analyze:hover { background: rgba(0,229,160,.2); }
+  .btn-analyze:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-analyze-auth { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); padding: 5px 10px; background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3); color: var(--warn); border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: var(--display); transition: background .15s; }
+  .btn-analyze-auth:hover { background: rgba(245,158,11,.2); }
+  .btn-analyze-auth:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* Profile selector */
+  .profile-row { display: flex; gap: 8px; align-items: flex-end; }
+  .profile-row select { flex: 1; }
+  .btn-clear-profile { padding: 9px 10px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 9px; font-size: 12px; cursor: pointer; white-space: nowrap; transition: all .15s; }
+  .btn-clear-profile:hover { color: var(--text); border-color: var(--danger); }
+
+  /* Auth accordion */
+  .auth-advanced { margin-top: 4px; }
+  .auth-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; padding: 6px 0; }
+  .auth-toggle:hover { color: var(--text); }
+  .auth-toggle .chevron { transition: transform .2s; font-size: 10px; }
+  .auth-toggle.open .chevron { transform: rotate(180deg); }
+  .auth-fields { display: none; flex-direction: column; gap: 10px; margin-top: 8px; padding: 12px; background: rgba(245,158,11,.04); border: 1px solid rgba(245,158,11,.15); border-radius: 10px; }
+  .auth-fields.visible { display: flex; }
+  .auth-note { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+  /* Status messages */
+  .url-msg { display: none; margin-top: 6px; font-size: 12px; padding: 8px 11px; border-radius: 8px; line-height: 1.5; }
+  .url-msg.loading { display: block; background: rgba(0,229,160,.05); border: 1px solid rgba(0,229,160,.2); color: var(--accent); }
+  .url-msg.ok      { display: block; background: rgba(0,229,160,.05); border: 1px solid rgba(0,229,160,.2); color: var(--accent); }
+  .url-msg.warn    { display: block; background: rgba(245,158,11,.05); border: 1px solid rgba(245,158,11,.2); color: var(--warn); }
+  .url-msg.err     { display: block; background: rgba(255,79,109,.05); border: 1px solid rgba(255,79,109,.25); color: var(--danger); }
+
+  /* Mode grid */
+  .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .mode-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 9px; padding: 10px 9px; font-family: var(--sans); font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 6px; text-align: left; }
+  .mode-btn:hover { border-color: var(--accent); color: var(--text); }
+  .mode-btn.active { background: rgba(0,229,160,.08); border-color: var(--accent); color: var(--accent); }
+  .mode-btn.full { grid-column: 1 / -1; }
+
+  /* Generate button */
+  .btn-generate { width: 100%; padding: 13px; background: var(--accent); color: #0b0e14; border: none; border-radius: 11px; font-family: var(--display); font-size: 14px; font-weight: 700; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-generate:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,229,160,.25); }
+  .btn-generate:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .spin { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.3); border-top-color: #000; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  .btn-generate.loading .spin { display: block; }
+  .btn-generate.loading .btn-label { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* History */
+  .history-item { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); font-size: 12px; cursor: pointer; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: all .15s; }
+  .history-item:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ── Output Panel ── */
+  .output-panel { display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+  .output-toolbar { padding: 12px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { padding: 5px 13px; border-radius: 7px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; border: 1px solid transparent; transition: all .15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--surface2); border-color: var(--border); color: var(--text); }
+  .actions { display: flex; gap: 6px; }
+  .btn-sm { padding: 5px 11px; border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); transition: all .15s; }
+  .btn-sm:hover { color: var(--text); border-color: var(--accent); }
+
+  .output-body { flex: 1; overflow-y: auto; padding: 24px 28px; }
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 14px; text-align: center; }
+  .empty-icon { font-size: 48px; opacity: .2; }
+  .empty h3 { font-family: var(--display); font-size: 16px; font-weight: 700; color: var(--text); opacity: .3; }
+  .empty p { font-size: 13px; max-width: 300px; line-height: 1.6; color: var(--muted); opacity: .6; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; overflow: hidden; margin-bottom: 16px; animation: slideIn .3s ease; }
+  @keyframes slideIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .card-head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 9px; background: var(--surface2); flex-wrap: wrap; }
+  .tag { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+  .tag-plan    { background: rgba(124,92,252,.15); color: var(--accent2); border: 1px solid rgba(124,92,252,.3); }
+  .tag-script  { background: rgba(0,229,160,.1);   color: var(--accent);  border: 1px solid rgba(0,229,160,.25); }
+  .tag-bdd     { background: rgba(247,201,72,.1);  color: var(--accent3); border: 1px solid rgba(247,201,72,.25); }
+  .tag-bug     { background: rgba(255,79,109,.1);  color: var(--danger);  border: 1px solid rgba(255,79,109,.25); }
+  .tag-cypress { background: rgba(0,181,120,.12);  color: var(--green);   border: 1px solid rgba(0,181,120,.3); }
+  .card-title { font-family: var(--display); font-size: 13px; font-weight: 700; flex: 1; }
+  .url-chip { font-family: var(--mono); font-size: 10px; color: var(--muted); background: var(--bg); padding: 2px 7px; border-radius: 5px; border: 1px solid var(--border); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .auth-chip { font-family: var(--mono); font-size: 10px; color: var(--warn); background: rgba(245,158,11,.08); padding: 2px 7px; border-radius: 5px; border: 1px solid rgba(245,158,11,.25); }
+  .card-body { padding: 18px; }
+
+  .output-text { font-size: 13px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+  .output-text code { font-family: var(--mono); background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--accent); }
+  .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); animation: blink 1s step-end infinite; vertical-align: text-bottom; margin-left: 2px; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* Cypress code */
+  .code-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .code-filename { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .btn-download { padding: 5px 12px; background: rgba(0,181,120,.1); border: 1px solid rgba(0,181,120,.3); color: var(--green); border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--display); transition: background .15s; }
+  .btn-download:hover { background: rgba(0,181,120,.2); }
+  .code-block { background: #0d1117; border: 1px solid #30363d; border-radius: 9px; padding: 16px; overflow-x: auto; }
+  .code-block pre { font-family: var(--mono); font-size: 12px; line-height: 1.7; color: #e6edf3; white-space: pre; margin: 0; }
+  .kw { color: #ff7b72; } .fn { color: #d2a8ff; } .str { color: #a5d6ff; } .cm { color: #8b949e; font-style: italic; }
+
+  .error-banner { background: rgba(255,79,109,.08); border: 1px solid rgba(255,79,109,.3); color: var(--danger); padding: 13px 16px; border-radius: 9px; font-size: 13px; line-height: 1.7; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  
+/* Modal 2FA */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; backdrop-filter: blur(6px);
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 32px; width: 340px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  animation: slideUp .25s ease;
+}
+@keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+.modal-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
+.modal-title { font-family: var(--display); font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 6px; }
+.modal-desc { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.6; margin-bottom: 20px; }
+
+.otp-input {
+  width: 100%; text-align: center; font-family: var(--mono);
+  font-size: 28px; font-weight: 700; letter-spacing: 10px;
+  background: var(--surface2); border: 2px solid var(--border);
+  color: var(--text); border-radius: 12px; padding: 14px;
+  outline: none; transition: border-color .2s;
+}
+.otp-input:focus { border-color: var(--warn); }
+
+.modal-timer { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; }
+.modal-timer span { color: var(--warn); font-weight: 700; }
+
+.modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+.btn-modal-cancel {
+  flex: 1; padding: 11px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--muted);
+  font-family: var(--display); transition: all .15s;
+}
+.btn-modal-cancel:hover { color: var(--danger); border-color: var(--danger); }
+.btn-modal-confirm {
+  flex: 2; padding: 11px; border-radius: 10px; font-size: 13px; font-weight: 700;
+  cursor: pointer; border: none; background: var(--warn); color: #0b0e14;
+  font-family: var(--display); transition: all .15s;
+}
+.btn-modal-confirm:hover { opacity: .9; }
+.btn-modal-confirm:disabled { opacity: .4; cursor: not-allowed; }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>QA Studio</div>
+  <span class="badge">⚡ Powered by Claude AI</span>
+</header>
+
+<main>
+  <aside class="sidebar">
+
+    <!-- ── URL Section ── -->
+    <div>
+      <div class="slabel" style="margin-bottom:10px">🔗 Analisar URL</div>
+
+      <div class="url-tabs">
+        <div class="url-tab active" id="tabPublic" onclick="switchUrlMode('public')">🌐 URL Pública</div>
+        <div class="url-tab" id="tabAuth" onclick="switchUrlMode('auth')">🔐 URL com Login</div>
+      </div>
+
+      <!-- Painel URL pública -->
+      <div class="url-panel visible" id="panelPublic">
+        <div class="field">
+          <label for="urlInput">URL da página</label>
+          <div class="url-wrap">
+            <input type="text" id="urlInput" placeholder="https://seu-sistema.com/pagina" />
+            <button class="btn-analyze" id="btnAnalyze" onclick="analyzeUrl()">Analisar</button>
+          </div>
+          <div class="url-msg" id="urlMsg"></div>
+        </div>
+      </div>
+
+      <!-- Painel URL autenticada -->
+      <div class="url-panel" id="panelAuth">
+
+        <!-- Perfil salvo -->
+        <div class="field">
+          <label>Perfil de sistema cadastrado</label>
+          <div class="profile-row">
+            <select id="profileSelect" onchange="onProfileChange()">
+              <option value="">— Selecione ou preencha manualmente —</option>
+            </select>
+            <button class="btn-clear-profile" onclick="clearProfile()" title="Limpar seleção">✕</button>
+          </div>
+        </div>
+
+        <!-- URL alvo -->
+        <div class="field">
+          <label for="authTargetUrl">URL a analisar (após login)</label>
+          <div class="url-wrap">
+            <input type="text" id="authTargetUrl" placeholder="https://sistema.com/pagina-protegida" style="padding-right:90px" />
+            <button class="btn-analyze-auth" id="btnAnalyzeAuth" onclick="analyzeUrlAuth()">Analisar</button>
+          </div>
+        </div>
+
+        <!-- Credenciais -->
+        <div class="row2">
+          <div class="field">
+            <label for="authUser">Usuário / E-mail</label>
+            <input type="text" id="authUser" placeholder="usuario@email.com" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label for="authPass">Senha</label>
+            <input type="password" id="authPass" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+        </div>
+
+        <!-- Configurações avançadas (seletores) -->
+        <div class="auth-advanced">
+          <div class="auth-toggle" id="authToggle" onclick="toggleAuthAdvanced()">
+            <span class="chevron">▼</span>
+            <span>Configurações avançadas (seletores CSS)</span>
+          </div>
+          <div class="auth-fields" id="authFields">
+            <p class="auth-note">⚙️ Deixe em branco para usar os seletores automáticos. Preencha apenas se o sistema tiver campos fora do padrão.</p>
+            <div class="field">
+              <label for="selUser">Seletor do campo usuário</label>
+              <input type="text" id="selUser" placeholder="input[name='email'], #username..." />
+            </div>
+            <div class="field">
+              <label for="selPass">Seletor do campo senha</label>
+              <input type="text" id="selPass" placeholder="input[type='password']" />
+            </div>
+            <div class="field">
+              <label for="selSubmit">Seletor do botão de login</label>
+              <input type="text" id="selSubmit" placeholder="button[type='submit'], #btn-login..." />
+            </div>
+            <div class="field">
+              <label for="selSuccess">Seletor de confirmação de login (opcional)</label>
+              <input type="text" id="selSuccess" placeholder=".dashboard, #menu-user..." />
+            </div>
+            <div class="field">
+              <label for="authLoginUrl">URL de login (se diferente da URL alvo)</label>
+              <input type="text" id="authLoginUrl" placeholder="https://sistema.com/login" />
+            </div>
+            <div class="field" style="margin-top: 4px;">
+  <label for="totpSecret">
+    🔐 TOTP Secret Key
+    <span style="font-weight:400; color: var(--muted); margin-left:4px">(Google Authenticator / Authy)</span>
+  </label>
+  <input
+    type="password"
+    id="totpSecret"
+    placeholder="Ex: JBSWY3DPEHPK3PXP"
+    autocomplete="one-time-code"
+    style="font-family: var(--mono); font-size: 12px; letter-spacing: 1px;"
+  />
+  <span style="font-size:11px; color: var(--muted); margin-top:3px; line-height:1.5; display:block">
+    ℹ️ No app de autenticação, vá em <strong>Configurações → Exportar conta</strong> ou procure pela opção
+    <strong>"não consigo escanear o QR Code"</strong> no sistema — a chave alfanumérica exibida é a secret key.
+  </span>
+</div>
+          </div>
+        </div>
+
+        <div class="url-msg" id="urlMsgAuth"></div>
+      </div>
+    </div>
+
+    
+<div class="modal-overlay" id="modal2FA" style="display:none">
+  <div class="modal-box">
+    <div class="modal-icon">🔐</div>
+    <div class="modal-title">Autenticação em 2 Fatores</div>
+    <div class="modal-desc">
+      Abra o app autenticador e digite o código de 6 dígitos gerado para este sistema.
+    </div>
+    <input
+      class="otp-input"
+      id="otpInput"
+      type="text"
+      maxlength="6"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      placeholder="000000"
+      autocomplete="one-time-code"
+    />
+    <div class="modal-timer">Tempo restante: <span id="timerCount">2:00</span></div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="cancel2FA()">Cancelar</button>
+      <button class="btn-modal-confirm" id="btnConfirm2FA" onclick="confirm2FA()" disabled>Confirmar</button>
+    </div>
+  </div>
+</div>
+
+    <div class="divider"></div>
+
+    <!-- ── Tipo de Output ── -->
+    <div>
+      <div class="slabel" style="margin-bottom:10px">Tipo de Output</div>
+      <div class="mode-grid">
+        <button class="mode-btn active" data-mode="plan"    onclick="setMode(this)"><span>📋</span> Test Plan</button>
+        <button class="mode-btn"        data-mode="script"  onclick="setMode(this)"><span>🧪</span> Test Script</button>
+        <button class="mode-btn"        data-mode="bdd"     onclick="setMode(this)"><span>🥒</span> BDD / Gherkin</button>
+        <button class="mode-btn"        data-mode="bug"     onclick="setMode(this)"><span>🐛</span> Bug Report</button>
+        <button class="mode-btn full"   data-mode="cypress" onclick="setMode(this)"><span>🌲</span> Cypress — Testes E2E</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── Campos principais ── -->
+    <div class="field">
+      <label for="feature">Funcionalidade / Feature</label>
+      <input type="text" id="feature" placeholder="Ex: Login, Checkout, Upload..." />
+    </div>
+    <div class="field">
+      <label for="context">Contexto adicional</label>
+      <textarea id="context" placeholder="Fluxos, requisitos, comportamento esperado..."></textarea>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Prioridade</label>
+        <select id="priority">
+          <option value="Alta">🔴 Alta</option>
+          <option value="Média" selected>🟡 Média</option>
+          <option value="Baixa">🟢 Baixa</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Idioma</label>
+        <select id="language">
+          <option value="pt-BR" selected>🇧🇷 PT-BR</option>
+          <option value="en-US">🇺🇸 EN-US</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn-generate" id="generateBtn" onclick="generate()">
+      <div class="spin"></div>
+      <span class="btn-label">✦ Gerar com IA</span>
+    </button>
+
+    <!-- Histórico -->
+    <div id="historySection" style="display:none">
+      <div class="divider"></div>
+      <div class="slabel" style="margin-bottom:8px">Histórico</div>
+      <div id="historyList" style="display:flex;flex-direction:column;gap:5px"></div>
+    </div>
+
+  </aside>
+
+  <!-- ── Output ── -->
+  <section class="output-panel">
+    <div class="output-toolbar">
+      <div class="tabs">
+        <div class="tab active" onclick="setTab('result')">Resultado</div>
+        <div class="tab" onclick="setTab('raw')">Raw Text</div>
+      </div>
+      <div class="actions">
+        <button class="btn-sm" onclick="copyOutput()">📋 Copiar</button>
+        <button class="btn-sm" onclick="clearOutput()">🗑 Limpar</button>
+      </div>
+    </div>
+    <div class="output-body" id="outputBody">
+      <div class="empty" id="emptyState">
+        <div class="empty-icon">🧪</div>
+        <h3>Pronto para gerar</h3>
+        <p>Cole uma URL pública ou faça login em um sistema protegido, depois clique em <strong>Gerar com IA</strong>.</p>
+      </div>
+      <div id="resultArea" style="display:none"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const API = '';
+
+const MODES = {
+  plan:    { tag:'TEST PLAN',     cls:'tag-plan',    icon:'📋', title: f=>`Plano de Testes — ${f}` },
+  script:  { tag:'TEST SCRIPT',   cls:'tag-script',  icon:'🧪', title: f=>`Test Scripts — ${f}` },
+  bdd:     { tag:'BDD / GHERKIN', cls:'tag-bdd',     icon:'🥒', title: f=>`Cenários BDD — ${f}` },
+  bug:     { tag:'BUG REPORT',    cls:'tag-bug',     icon:'🐛', title: f=>`Bug Report — ${f}` },
+  cypress: { tag:'CYPRESS E2E',   cls:'tag-cypress', icon:'🌲', title: f=>`Cypress Tests — ${f}` },
+};
+
+let currentMode  = 'plan';
+let urlMode      = 'public';   // 'public' | 'auth'
+let rawText      = '';
+let rawTab       = false;
+let history      = [];
+let lastUrl      = '';
+let urlContext   = '';
+let wasAuth      = false;
+
+// ── Init: carrega perfis do backend ──────────────────────────────────────────
+async function loadProfiles() {
+  try {
+    const res = await fetch(`${API}/api/profiles`);
+    const profiles = await res.json();
+    const sel = document.getElementById('profileSelect');
+    profiles.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      opt.dataset.loginUrl = p.loginUrl;
+      sel.appendChild(opt);
+    });
+  } catch(_) {}
+}
+loadProfiles();
+
+// ── URL mode switch ───────────────────────────────────────────────────────────
+function switchUrlMode(mode) {
+  urlMode = mode;
+  document.getElementById('tabPublic').className = 'url-tab' + (mode === 'public' ? ' active' : '');
+  document.getElementById('tabAuth').className   = 'url-tab' + (mode === 'auth'   ? ' active-auth' : '');
+  document.getElementById('panelPublic').className = 'url-panel' + (mode === 'public' ? ' visible' : '');
+  document.getElementById('panelAuth').className   = 'url-panel' + (mode === 'auth'   ? ' visible' : '');
+}
+
+// ── Profile selector ──────────────────────────────────────────────────────────
+function onProfileChange() {
+  const sel = document.getElementById('profileSelect');
+  const opt = sel.options[sel.selectedIndex];
+  if (opt && opt.dataset.loginUrl) {
+    document.getElementById('authLoginUrl').value = opt.dataset.loginUrl;
+  }
+}
+
+function clearProfile() {
+  document.getElementById('profileSelect').value = '';
+  document.getElementById('authLoginUrl').value = '';
+}
+
+// ── Advanced selectors accordion ──────────────────────────────────────────────
+function toggleAuthAdvanced() {
+  const toggle = document.getElementById('authToggle');
+  const fields = document.getElementById('authFields');
+  toggle.classList.toggle('open');
+  fields.classList.toggle('visible');
+}
+
+// ── Mode selector ─────────────────────────────────────────────────────────────
+function setMode(btn) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMode = btn.dataset.mode;
+}
+
+// ── Tab ───────────────────────────────────────────────────────────────────────
+function setTab(t) {
+  rawTab = t === 'raw';
+  document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', (i===0) !== rawTab));
+  document.querySelectorAll('.output-text').forEach(el => {
+    el.style.fontFamily = rawTab ? 'var(--mono)' : '';
+    el.style.fontSize   = rawTab ? '12px' : '';
+    el.style.color      = rawTab ? 'var(--muted)' : '';
+  });
+}
+
+// ── Analyze URL pública ───────────────────────────────────────────────────────
+async function analyzeUrl() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url.startsWith('http')) { showMsg('urlMsg', 'err', '⚠️ URL inválida — use http:// ou https://'); return; }
+
+  document.getElementById('btnAnalyze').disabled = true;
+  showMsg('urlMsg', 'loading', '🔍 Acessando URL e extraindo informações...');
+
+  try {
+    const res = await fetch(`${API}/api/analyze-url`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ url, totpSecret: totpSecret || undefined })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    fillForm(data, url, false);
+    showMsg('urlMsg', 'ok', `✅ <strong>${data.pageTitle || url}</strong> — formulário preenchido.`);
+  } catch(err) {
+    showMsg('urlMsg', 'err', `⚠️ ${err.message}`);
+  }
+  document.getElementById('btnAnalyze').disabled = false;
+}
+
+// ── Analyze URL autenticada ───────────────────────────────────────────────────
+
+// Variáveis de estado do modal 2FA
+
+// Estado do modal 2FA
+let pending2FASession = null;  // guarda o sessionId enquanto modal está aberto
+let timerInterval     = null;
+
+// ── Análise de URL autenticada (SSE + modal 2FA) ──────────────────────────────
+async function analyzeUrlAuth() {
+  const targetUrl  = document.getElementById('authTargetUrl').value.trim();
+  const username   = document.getElementById('authUser').value.trim();
+  const password   = document.getElementById('authPass').value;
+  const loginUrl   = document.getElementById('authLoginUrl').value.trim() || targetUrl;
+  const totpSecret = document.getElementById('totpSecret').value.trim();
+  const profileId  = document.getElementById('profileSelect').value;
+
+  const selectors = {};
+  const su = document.getElementById('selUser').value.trim();
+  const sp = document.getElementById('selPass').value.trim();
+  const ss = document.getElementById('selSubmit').value.trim();
+  const sc = document.getElementById('selSuccess').value.trim();
+  if (su) selectors.usernameField    = su;
+  if (sp) selectors.passwordField    = sp;
+  if (ss) selectors.submitButton     = ss;
+  if (sc) selectors.successIndicator = sc;
+
+  if (!targetUrl.startsWith('http')) {
+    showMsg('urlMsgAuth', 'err', '⚠️ Informe a URL a analisar (após login)');
+    return;
+  }
+
+  document.getElementById('btnAnalyzeAuth').disabled = true;
+  showMsg('urlMsgAuth', 'warn', '🔐 Abrindo browser e fazendo login...<br><small>Aguarde — pode levar 20–40 segundos</small>');
+
+  try {
+    const response = await fetch(`${API}/api/analyze-url-auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        loginUrl,
+        targetUrl,
+        username:   username   || undefined,
+        password:   password   || undefined,
+        totpSecret: totpSecret || undefined,
+        selectors,
+        profileId:  profileId  || undefined,
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    // Lê o stream SSE linha a linha até o servidor fechar a conexão
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let currentEvent = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // preserva linha incompleta
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ') && currentEvent) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            handleSSEEvent(currentEvent, data);
+          } catch (_) {}
+          currentEvent = null;
+        }
+      }
+    }
+
+  } catch (err) {
+    showMsg('urlMsgAuth', 'err', `⚠️ ${err.message}`);
+  }
+
+  document.getElementById('btnAnalyzeAuth').disabled = false;
+  closeModal();
+}
+
+// ── Processa eventos SSE vindos do backend ────────────────────────────────────
+
+function handleSSEEvent(event, data) {
+  switch (event) {
+    case 'status':
+      showMsg('urlMsgAuth', 'warn', `⏳ ${data.message}`);
+      break;
+
+    case 'need2FA':
+      // Salva o sessionId e abre o modal — o SSE reader continua rodando no fundo
+      pending2FASession = data.sessionId;
+      openModal();
+      showMsg('urlMsgAuth', 'warn', '🔐 Aguardando código 2FA...');
+      break;
+
+    case 'done':
+      fillForm(data, data.url, true);
+      showMsg('urlMsgAuth', 'ok', `✅ <strong>${data.pageTitle || data.url}</strong> — login OK, formulário preenchido.`);
+      closeModal();
+      break;
+
+    case 'error':
+      showMsg('urlMsgAuth', 'err', `⚠️ ${data.error}`);
+      closeModal();
+      break;
+  }
+}
+
+// ── Modal 2FA ─────────────────────────────────────────────────────────────────
+
+function openModal() {
+  const input   = document.getElementById('otpInput');
+  const confirm = document.getElementById('btnConfirm2FA');
+
+  input.value      = '';
+  confirm.disabled = true;
+  document.getElementById('modal2FA').style.display = 'flex';
+  setTimeout(() => input.focus(), 100);
+
+  input.oninput = () => {
+    input.value      = input.value.replace(/\D/g, '').slice(0, 6);
+    confirm.disabled = input.value.length !== 6;
+  };
+  input.onkeydown = (e) => { if (e.key === 'Enter' && !confirm.disabled) confirm2FA(); };
+
+  // Timer regressivo 2 minutos
+  let seconds = 120;
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    seconds--;
+    const m = Math.floor(seconds / 60);
+    const s = String(seconds % 60).padStart(2, '0');
+    document.getElementById('timerCount').textContent = `${m}:${s}`;
+    if (seconds <= 0) {
+      clearInterval(timerInterval);
+      closeModal();
+      showMsg('urlMsgAuth', 'err', '⚠️ Tempo esgotado. Tente analisar novamente.');
+    }
+  }, 1000);
+}
+
+function closeModal() {
+  document.getElementById('modal2FA').style.display = 'none';
+  clearInterval(timerInterval);
+  // NÃO zeramos pending2FASession aqui — confirm2FA() ainda pode precisar dele
+}
+
+async function confirm2FA() {
+  const code    = document.getElementById('otpInput').value.trim();
+  const session = pending2FASession; // ← captura ANTES de qualquer reset
+
+  if (code.length !== 6 || !session) return;
+
+  document.getElementById('btnConfirm2FA').disabled = true;
+  closeModal();
+  pending2FASession = null; // zera só depois de capturar
+  showMsg('urlMsgAuth', 'warn', '✅ Código enviado — aguardando confirmação do login...');
+
+  try {
+    const res = await fetch(`${API}/api/submit-2fa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: session, code })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showMsg('urlMsgAuth', 'err', `⚠️ ${err.error || 'Erro ao enviar código'}`);
+    }
+    // Não precisa fazer mais nada — o SSE reader ainda está ativo
+    // e vai receber o evento 'done' ou 'error' do backend
+  } catch (err) {
+    showMsg('urlMsgAuth', 'err', `⚠️ Erro ao enviar código: ${err.message}`);
+  }
+}
+
+function cancel2FA() {
+  pending2FASession = null;
+  closeModal();
+  document.getElementById('btnAnalyzeAuth').disabled = false;
+  showMsg('urlMsgAuth', 'err', '⚠️ Autenticação cancelada.');
+}
+
+// ── Preenche formulário com dados extraídos ───────────────────────────────────
+function fillForm(data, url, auth) {
+  if (data.feature) document.getElementById('feature').value = data.feature;
+  if (data.context) document.getElementById('context').value = data.context;
+  if (data.suggestedMode) {
+    const btn = document.querySelector(`.mode-btn[data-mode="${data.suggestedMode}"]`);
+    if (btn) setMode(btn);
+  }
+  lastUrl    = url;
+  wasAuth    = auth;
+  urlContext = `Página analisada: ${url}\nTítulo: ${data.pageTitle||''}\n\n${data.context||''}`;
+}
+
+function showMsg(id, type, html) {
+  const el = document.getElementById(id);
+  el.className = `url-msg ${type}`;
+  el.innerHTML = html;
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+async function generate() {
+  const feature = document.getElementById('feature').value.trim();
+  if (!feature) {
+    const inp = document.getElementById('feature');
+    inp.focus(); inp.style.borderColor = 'var(--danger)';
+    setTimeout(() => inp.style.borderColor = '', 2000);
+    return;
+  }
+
+  const context  = document.getElementById('context').value.trim();
+  const priority = document.getElementById('priority').value;
+  const language = document.getElementById('language').value;
+
+  const genBtn = document.getElementById('generateBtn');
+  genBtn.disabled = true; genBtn.classList.add('loading');
+
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultArea').style.display = 'block';
+
+  const m = MODES[currentMode];
+  const cardId = 'c' + Date.now();
+  const card = document.createElement('div');
+  card.className = 'card'; card.id = cardId;
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="tag ${m.cls}">${m.tag}</span>
+      <span class="card-title">${m.title(feature)}</span>
+      ${lastUrl ? `<span class="url-chip" title="${lastUrl}">🔗 ${lastUrl}</span>` : ''}
+      ${wasAuth ? `<span class="auth-chip">🔐 autenticado</span>` : ''}
+    </div>
+    <div class="card-body">
+      <div class="output-text" id="s-${cardId}"><span class="cursor"></span></div>
+    </div>`;
+
+  const area = document.getElementById('resultArea');
+  area.insertBefore(card, area.firstChild);
+  const streamEl = document.getElementById('s-' + cardId);
+  let accumulated = '';
+
+  try {
+    const res = await fetch(`${API}/api/generate`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode: currentMode, feature, context, priority, language, urlContext })
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error||`HTTP ${res.status}`); }
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const d = JSON.parse(line.slice(6));
+          if (d.error) throw new Error(d.error);
+          if (d.text) {
+  accumulated += d.text;
+  // Durante streaming: texto simples para não travar o browser
+  streamEl.textContent = accumulated;
+  streamEl.appendChild(Object.assign(document.createElement('span'), { className: 'cursor' }));
+}
+          if (d.done) {
+            rawText = accumulated;
+            if (currentMode === 'cypress') {
+              const clean = accumulated.replace(/^```(javascript|js)?\n?/i,'').replace(/```\s*$/,'').trim();
+              rawText = clean;
+              renderCypress(clean, streamEl, feature);
+            } else {
+              streamEl.innerHTML = fmtText(accumulated);
+            }
+          }
+        } catch(e) { if (e.message !== 'Unexpected end of JSON input') throw e; }
+      }
+    }
+    addHistory(feature, currentMode, rawText);
+  } catch(err) {
+    streamEl.innerHTML = `<div class="error-banner">⚠️ <strong>Erro ao conectar com o backend</strong><br><br>${err.message}<br><br>Servidor rodando? <code>cd backend && npm run dev</code></div>`;
+  }
+
+  genBtn.disabled = false; genBtn.classList.remove('loading');
+}
+
+// ── Formatação ────────────────────────────────────────────────────────────────
+function fmtText(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^### (.+)$/gm, '<strong style="font-size:13px;color:var(--text);display:block;margin-top:13px;margin-bottom:3px">$1</strong>')
+    .replace(/^## (.+)$/gm,  '<strong style="font-size:14px;color:var(--accent);display:block;margin-top:16px;margin-bottom:4px;font-family:var(--display)">$1</strong>')
+    .replace(/^# (.+)$/gm,   '<strong style="font-size:16px;color:var(--accent);display:block;margin-top:16px;margin-bottom:5px;font-family:var(--display)">$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+function renderCypress(code, el, feature) {
+  el.innerHTML = '';
+  const name = feature.replace(/[^a-z0-9]/gi,'-').toLowerCase();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div class="code-header">
+      <span class="code-filename">📄 ${name}.cy.js</span>
+      <button class="btn-download" onclick="downloadFile('${name}.cy.js')">⬇ Baixar .cy.js</button>
+    </div>
+    <div class="code-block"><pre>${hlJS(code)}</pre></div>`;
+  el.appendChild(wrap);
+}
+
+function hlJS(code) {
+  return code
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>')
+    .replace(/\b(const|let|var|function|return|if|else|for|of|import|export|default|async|await|true|false|null|undefined)\b/g,'<span class="kw">$1</span>')
+    .replace(/(["'`])(?:(?!\1)[^\\]|\\.)*?\1/g,'<span class="str">$&</span>')
+    .replace(/\b(cy|Cypress|describe|it|context|beforeEach|afterEach|expect|assert)\b/g,'<span class="fn">$1</span>');
+}
+
+function downloadFile(filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rawText],{type:'text/javascript'}));
+  a.download = filename; a.click();
+}
+
+// ── Histórico ─────────────────────────────────────────────────────────────────
+function addHistory(feature, mode, content) {
+  history.unshift({ feature, mode, content, ts: new Date().toLocaleTimeString(), url: lastUrl, auth: wasAuth });
+  if (history.length > 6) history.pop();
+  document.getElementById('historySection').style.display = 'block';
+  const list = document.getElementById('historyList');
+  list.innerHTML = '';
+  history.forEach(h => {
+    const item = document.createElement('div');
+    item.className = 'history-item'; item.title = h.feature;
+    item.innerHTML = `${MODES[h.mode].icon} ${h.feature}${h.auth?' 🔐':''} <span style="float:right;font-size:10px;opacity:.4">${h.ts}</span>`;
+    item.onclick = () => {
+      rawText = h.content;
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('resultArea').style.display = 'block';
+      const m = MODES[h.mode];
+      const c = document.createElement('div'); c.className = 'card';
+      c.innerHTML = `<div class="card-head"><span class="tag ${m.cls}">${m.tag}</span><span class="card-title">${m.title(h.feature)}</span>${h.url?`<span class="url-chip">🔗 ${h.url}</span>`:''} ${h.auth?'<span class="auth-chip">🔐 autenticado</span>':''}</div><div class="card-body"><div class="output-text"></div></div>`;
+      const ra = document.getElementById('resultArea'); ra.innerHTML=''; ra.appendChild(c);
+      const ot = c.querySelector('.output-text');
+      if (h.mode === 'cypress') renderCypress(h.content, ot, h.feature);
+      else ot.innerHTML = fmtText(h.content);
+    };
+    list.appendChild(item);
+  });
+}
+
+// ── Ações ─────────────────────────────────────────────────────────────────────
+function copyOutput() {
+  if (!rawText) return;
+  navigator.clipboard.writeText(rawText).then(() => {
+    const btn = document.querySelector('.actions .btn-sm');
+    const o = btn.textContent; btn.textContent = '✅ Copiado!';
+    setTimeout(() => btn.textContent = o, 2000);
+  });
+}
+function clearOutput() {
+  document.getElementById('resultArea').style.display = 'none';
+  document.getElementById('resultArea').innerHTML = '';
+  document.getElementById('emptyState').style.display = 'flex';
+  rawText = '';
+}
+
+document.getElementById('feature').addEventListener('keydown', e => { if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();generate();} });
+document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key==='Enter') analyzeUrl(); });
+document.getElementById('authTargetUrl').addEventListener('keydown', e => { if (e.key==='Enter') analyzeUrlAuth(); });
+</script>
+</body>
+</html>
