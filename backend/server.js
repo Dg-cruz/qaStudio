@@ -66,15 +66,18 @@ async function scrapeUrl(url) {
 }
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
-const buildPrompt = ({ mode, feature, context, priority, language, urlContext }) => {
+const buildPrompt = ({ mode, feature, context, acceptance, priority, language, urlContext }) => {
   const lang = language === 'en-US' ? 'English' : 'Português do Brasil';
   const ctx = [context, urlContext].filter(Boolean).join('\n\n---\n\n') || 'Não informado';
+  const acceptanceBlock = acceptance
+    ? `\n\n⚠️ CRITÉRIOS DE ACEITE (MÁXIMA PRIORIDADE — considere estes como a fonte principal de verdade para gerar os casos de teste, acima de qualquer outra informação do contexto):\n${acceptance}`
+    : '';
 
   const prompts = {
     plan: `Você é um QA Engineer sênior especialista em testes de software. Gere um plano de testes completo e profissional.
 
 Feature: ${feature}
-Contexto: ${ctx}
+Contexto: ${ctx}${acceptanceBlock}
 Prioridade: ${priority}
 Idioma de resposta: ${lang}
 
@@ -92,25 +95,35 @@ Seja detalhado e profissional.`,
     script: `Você é um QA Engineer sênior. Gere casos de teste detalhados no formato de test scripts.
 
 Feature: ${feature}
-Contexto: ${ctx}
+Contexto: ${ctx}${acceptanceBlock}
 Prioridade: ${priority}
 Idioma de resposta: ${lang}
 
-Para cada caso de teste inclua:
-- **ID** (ex: TC-001)
-- **Título**
-- **Pré-condições**
-- **Passos** (numerados e detalhados)
-- **Dados de Teste**
-- **Resultado Esperado**
-- **Status** (A Executar)
+Para cada caso de teste use EXATAMENTE este formato de tabela markdown:
 
-Cubra: happy path, fluxos alternativos, casos negativos e edge cases. Gere no mínimo 6 casos.`,
+| Campo | Valor |
+|-------|-------|
+| **ID** | TC-001 |
+| **Título** | título do caso |
+| **Pré-condições** | pré-condições necessárias |
+| **Passos** | 1. primeiro passo<br>2. segundo passo<br>3. terceiro passo |
+| **Dados de Teste** | dados utilizados |
+| **Resultado Esperado** | o que deve acontecer |
+| **Status** | A Executar |
+
+REGRAS OBRIGATÓRIAS para o campo Passos:
+- Cada passo em uma linha separada usando a tag HTML: <br>
+- Formato exato: 1. passo um<br>2. passo dois<br>3. passo três
+- NUNCA coloque todos os passos em uma única linha separados por ponto e vírgula
+- Seja específico: mencione nomes de campos, botões e URLs reais do contexto
+
+Cubra: happy path, fluxos alternativos, casos negativos e edge cases.
+IMPORTANTE: Gere entre 5 e 8 casos de teste. SEMPRE finalize completamente o último caso — nunca corte no meio de uma tabela ou frase.`,
 
     bdd: `Você é um QA Engineer especialista em BDD. Gere cenários Gherkin profissionais.
 
 Feature: ${feature}
-Contexto: ${ctx}
+Contexto: ${ctx}${acceptanceBlock}
 Prioridade: ${priority}
 Idioma de resposta: ${lang}
 
@@ -125,7 +138,7 @@ Use linguagem de domínio, seja específico e cubra fluxos positivos, negativos 
     bug: `Você é um QA Engineer sênior. Gere um relatório de bug completo e profissional.
 
 Bug / Problema: ${feature}
-Descrição: ${ctx}
+Descrição: ${ctx}${acceptanceBlock}
 Prioridade: ${priority}
 Idioma de resposta: ${lang}
 
@@ -144,7 +157,7 @@ Estruture com:
     cypress: `Você é um QA Engineer sênior especialista em automação com Cypress. Gere um arquivo de testes Cypress completo e pronto para executar.
 
 Feature: ${feature}
-Contexto: ${ctx}
+Contexto: ${ctx}${acceptanceBlock}
 URL base (se disponível no contexto): use cy.visit() com o caminho correto
 
 REGRAS OBRIGATÓRIAS:
@@ -199,8 +212,8 @@ app.post('/api/analyze-url', async (req, res) => {
     const scraped = await scrapeUrl(url);
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 16000,    
+      model: 'claude-opus-4-5',
+      max_tokens: 700,
       messages: [{
         role: 'user',
         content: `Você é um QA Engineer analisando uma página para criar testes de software.
@@ -238,81 +251,51 @@ Responda APENAS com JSON válido, sem markdown, sem explicações:
 });
 
 
-// Armazena sessões de 2FA pendentes em memória
-// { sessionId -> { resolve, reject } }
-const pending2FA = new Map();
-
 // ─── POST /api/analyze-url-auth ───────────────────────────────────────────────
+// Acessa URLs que exigem login usando Puppeteer
 app.post('/api/analyze-url-auth', async (req, res) => {
-  const { loginUrl, targetUrl, username, password, totpSecret, selectors, waitAfterLogin, profileId } = req.body;
+  const { loginUrl, targetUrl, username, password, selectors, waitAfterLogin, profileId } = req.body;
 
+  // Se informou um profileId, usa as configs do perfil como base
   const profile = profileId && PROFILES[profileId] ? PROFILES[profileId] : {};
 
-  const finalLoginUrl  = loginUrl    || profile.loginUrl;
-  const finalTargetUrl = targetUrl   || profile.loginUrl;
-  const finalUsername  = username    || process.env.AUTH_DEFAULT_USERNAME;
-  const finalPassword  = password    || process.env.AUTH_DEFAULT_PASSWORD;
-  const finalTotp      = totpSecret  || profile.totpSecret || process.env.AUTH_DEFAULT_TOTP_SECRET;
-  const finalSelectors = { ...(profile.selectors || {}), ...(selectors || {}) };
-  const finalWait      = waitAfterLogin || profile.waitAfterLogin || 3000;
-  // Se não tiver secret key, usa modo manual (modal)
-  const useManual2FA   = !finalTotp && (profile.manual2FA !== false);
+  const finalLoginUrl    = loginUrl    || profile.loginUrl;
+  const finalTargetUrl   = targetUrl   || profile.loginUrl;
+  const finalUsername    = username    || process.env.AUTH_DEFAULT_USERNAME;
+  const finalPassword    = password    || process.env.AUTH_DEFAULT_PASSWORD;
+  const finalSelectors   = { ...(profile.selectors || {}), ...(selectors || {}) };
+  const finalWait        = waitAfterLogin || profile.waitAfterLogin || 3000;
 
-  if (!finalLoginUrl)                    return res.status(400).json({ error: 'loginUrl é obrigatório.' });
-  if (!finalUsername || !finalPassword)  return res.status(400).json({ error: 'Usuário e senha são obrigatórios.' });
-
-  // Gera um ID de sessão único para este fluxo de autenticação
-  const sessionId = `auth_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-
-  // Configura SSE para comunicação em tempo real com o frontend
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  const send = (event, data) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  };
+  if (!finalLoginUrl) return res.status(400).json({ error: 'loginUrl é obrigatório (ou escolha um perfil cadastrado).' });
+  if (!finalUsername || !finalPassword) return res.status(400).json({ error: 'Usuário e senha são obrigatórios.' });
 
   try {
-    send('status', { message: '🔐 Abrindo browser e fazendo login...' });
-
-    // Callback chamado pelo scraper quando detecta tela de 2FA manual
-    const onNeed2FA = useManual2FA
-      ? () => new Promise((resolve, reject) => {
-          // Registra a sessão pendente
-          pending2FA.set(sessionId, { resolve, reject });
-          // Notifica o frontend para abrir o modal
-          send('need2FA', { sessionId, message: 'Digite o código do seu app autenticador.' });
-        })
-      : undefined;
+    console.log(`[/api/analyze-url-auth] Iniciando scraping autenticado: ${finalTargetUrl}`);
 
     const { content, title, finalUrl } = await scrapeWithAuth({
-      loginUrl:       finalLoginUrl,
-      targetUrl:      finalTargetUrl,
-      username:       finalUsername,
-      password:       finalPassword,
-      totpSecret:     finalTotp || undefined,
-      onNeed2FA,
-      selectors:      finalSelectors,
+      loginUrl:      finalLoginUrl,
+      targetUrl:     finalTargetUrl,
+      username:      finalUsername,
+      password:      finalPassword,
+      selectors:     finalSelectors,
       waitAfterLogin: finalWait,
     });
 
     if (!content || content.length < 50) {
-      throw new Error('Conteúdo extraído está vazio. Verifique se o login funcionou.');
+      return res.status(422).json({ error: 'Conteúdo extraído está vazio ou muito curto. Verifique se o login funcionou.' });
     }
 
-    send('status', { message: '🤖 Login OK! Analisando conteúdo com IA...' });
-
+    // Usa a IA para extrair feature + contexto (mesmo fluxo do analyze-url normal)
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 16000,
+      model: 'claude-opus-4-5',
+      max_tokens: 700,
       messages: [{
         role: 'user',
-        content: `Você é um QA Engineer analisando uma página autenticada para criar testes.
+        content: `Você é um QA Engineer analisando uma página autenticada para criar testes de software.
 
+Analise o conteúdo abaixo e extraia informações para QA.
 URL: ${finalUrl}
-Título: ${title}
+Título da página: ${title}
 
 Conteúdo:
 ---
@@ -322,42 +305,37 @@ ${content}
 Responda APENAS com JSON válido, sem markdown:
 {
   "feature": "nome curto da funcionalidade principal (max 80 chars)",
-  "context": "descrição detalhada: fluxos, campos, interações, regras de negócio (max 800 chars)",
+  "context": "descrição detalhada: o que a página faz, fluxos, campos, interações, regras de negócio (max 800 chars)",
   "suggestedMode": "plan | script | bdd | bug",
   "pageTitle": "${title}"
 }`
       }]
     });
 
-    const extracted = JSON.parse(
-      message.content[0].text.trim().replace(/```json|```/g, '').trim()
-    );
+    const raw = message.content[0].text.trim().replace(/```json|```/g, '').trim();
+    const extracted = JSON.parse(raw);
 
-    // Envia resultado final via SSE
-    send('done', { success: true, url: finalUrl, authenticated: true, ...extracted });
-    res.end();
+    res.json({ success: true, url: finalUrl, authenticated: true, ...extracted });
 
   } catch (err) {
-    console.error('[/api/analyze-url-auth]', err.message);
-    // Limpa sessão pendente em caso de erro
-    const pending = pending2FA.get(sessionId);
-    if (pending) { pending.reject(err); pending2FA.delete(sessionId); }
-    send('error', { error: err.message });
-    res.end();
+    console.error('[/api/analyze-url-auth] Erro:', err.message);
+    const isLoginError = err.message.toLowerCase().includes('login');
+    res.status(isLoginError ? 401 : 500).json({ error: err.message || 'Erro ao acessar URL autenticada.' });
   }
 });
 
 // ─── GET /api/profiles ────────────────────────────────────────────────────────
+// Retorna os perfis cadastrados (sem expor senhas do .env)
 app.get('/api/profiles', (req, res) => {
   const safe = Object.entries(PROFILES)
     .filter(([k]) => !k.startsWith('_'))
-    .map(([id, p]) => ({ id, name: p.name, loginUrl: p.loginUrl, manual2FA: !!p.manual2FA }));
+    .map(([id, p]) => ({ id, name: p.name, loginUrl: p.loginUrl }));
   res.json(safe);
 });
 
 // ─── POST /api/generate ───────────────────────────────────────────────────────
 app.post('/api/generate', async (req, res) => {
-  const { mode, feature, context, priority, language, urlContext } = req.body;
+  const { mode, feature, context, acceptance, priority, language, urlContext } = req.body;
 
   if (!feature?.trim()) return res.status(400).json({ error: 'O campo "feature" é obrigatório.' });
   if (!['plan', 'script', 'bdd', 'bug', 'cypress'].includes(mode)) return res.status(400).json({ error: 'Modo inválido.' });
@@ -371,7 +349,7 @@ app.post('/api/generate', async (req, res) => {
     const stream = anthropic.messages.stream({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 16000,
-      messages: [{ role: 'user', content: buildPrompt({ mode, feature, context, priority, language, urlContext }) }]
+      messages: [{ role: 'user', content: buildPrompt({ mode, feature, context, acceptance, priority, language, urlContext }) }]
     });
 
     stream.on('text', t => res.write(`data: ${JSON.stringify({ text: t })}\n\n`));
@@ -382,26 +360,6 @@ app.post('/api/generate', async (req, res) => {
     res.write(`data: ${JSON.stringify({ error: 'Erro interno do servidor.' })}\n\n`);
     res.end();
   }
-});
-
-// ─── POST /api/submit-2fa ────────────────────────────────────────────────────
-// Recebe o código digitado pelo usuário no modal e desbloqueia o scraper
-app.post('/api/submit-2fa', (req, res) => {
-  const { sessionId, code } = req.body;
-
-  if (!sessionId || !code) {
-    return res.status(400).json({ error: 'sessionId e code são obrigatórios.' });
-  }
-
-  const pending = pending2FA.get(sessionId);
-  if (!pending) {
-    return res.status(404).json({ error: 'Sessão não encontrada ou já expirada.' });
-  }
-
-  pending2FA.delete(sessionId);
-  pending.resolve(String(code).trim());
-
-  res.json({ ok: true });
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

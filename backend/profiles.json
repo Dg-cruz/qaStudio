@@ -15,13 +15,13 @@
   },
 
   "exemplo-sistema-2": {
-    "name": "Meu Sistema 2",
-    "loginUrl": "https://www.bellascestasonline.com/login",
+    "name": "Gator",
+    "loginUrl": "https://back-test.patagoniaentertainment.com/index.do",
     "totpSecret": "",
     "selectors": {
-      "usernameField":    "#input-email",
-      "passwordField":    "#input-password",
-      "submitButton":     "#btn-password",
+      "usernameField":    "#j_username",
+      "passwordField":    "#j_password",
+      "submitButton":     "#login_button",
       "totpField":        "#otp-code",
       "successIndicator": ".dashboard-header"
     },
