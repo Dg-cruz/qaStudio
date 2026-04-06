@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>K6 Runner — Rodar Teste</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #03050a;
+      --surface: #080d18;
+      --surface2: #0b1220;
+      --border: #0f1d35;
+      --border2: #1a2d4a;
+      --accent: #00e5ff;
+      --accent2: #7c3aed;
+      --accent3: #10b981;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --text: #dde6f0;
+      --muted: #4a6080;
+      --mono: 'Space Mono', monospace;
+      --display: 'Bebas Neue', sans-serif;
+      --body: 'DM Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      min-height: 100vh;
+    }
+
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.02) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-a { width: 500px; height: 500px; background: rgba(0,229,255,0.05); top: -100px; right: -100px; }
+    .orb-b { width: 400px; height: 400px; background: rgba(124,58,237,0.06); bottom: 0; left: -100px; }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── NAV ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .nav-logo {
+      font-family: var(--display);
+      font-size: 28px;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, #fff, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--border2);
+    }
+
+    .nav-page {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .nav-back {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s;
+    }
+    .nav-back:hover { color: var(--text); }
+
+    /* ── PAGE HEADER ── */
+    .page-header {
+      margin-bottom: 36px;
+      opacity: 0;
+      animation: fade-up 0.5s ease forwards 0.05s;
+    }
+
+    .page-title {
+      font-family: var(--display);
+      font-size: clamp(40px, 6vw, 64px);
+      letter-spacing: 2px;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .page-sub {
+      font-size: 14px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    /* ── FORM LAYOUT ── */
+    .form-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 760px) {
+      .form-layout { grid-template-columns: 1fr; }
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 16px 20px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-head-icon {
+      font-size: 16px;
+    }
+
+    .card-head-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .card-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── FORM ELEMENTS ── */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    label .required {
+      color: var(--accent);
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .input, .select, .textarea {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text);
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      appearance: none;
+    }
+
+    .input::placeholder { color: #1e3050; }
+    .input:focus, .select:focus, .textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,229,255,0.07);
+    }
+
+    .select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%234a6080' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+
+    .select option { background: #0c1826; }
+
+    .textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .input-hint {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── TEST TYPE CARDS ── */
+    .test-types {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .type-card {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .type-card input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .type-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 12px 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+
+    .type-label:hover {
+      border-color: rgba(0,229,255,0.25);
+    }
+
+    .type-card input:checked + .type-label {
+      border-color: var(--accent);
+      background: rgba(0,229,255,0.06);
+      box-shadow: 0 0 0 1px rgba(0,229,255,0.15);
+    }
+
+    .type-emoji { font-size: 20px; }
+    .type-name {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+    .type-desc {
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    /* ── METHOD SELECTOR ── */
+    .method-tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .method-btn {
+      padding: 7px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .method-btn:hover { color: var(--text); border-color: var(--border2); }
+    .method-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(0,229,255,0.06); }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: sticky;
+      top: 24px;
+    }
+
+    /* ── RUN BUTTON ── */
+    .run-btn {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #0a2040, rgba(0,229,255,0.15));
+      border: 1px solid rgba(0,229,255,0.3);
+      border-radius: 12px;
+      font-family: var(--display);
+      font-size: 28px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s;
+      box-shadow: 0 0 30px rgba(0,229,255,0.08);
+    }
+
+    .run-btn:hover {
+      background: linear-gradient(135deg, #0d2d55, rgba(0,229,255,0.2));
+      box-shadow: 0 0 50px rgba(0,229,255,0.15);
+      transform: translateY(-2px);
+    }
+
+    .run-btn:active { transform: translateY(0); }
+
+    .run-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .run-btn-icon {
+      font-size: 24px;
+      animation: none;
+    }
+
+    .run-btn.running .run-btn-icon {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── SUMMARY BOX (sidebar) ── */
+    .summary-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .summary-head {
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .summary-head-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .summary-items {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .summary-key {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      flex-shrink: 0;
+    }
+
+    .summary-val {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      text-align: right;
+      word-break: break-all;
+    }
+
+    /* ── TERMINAL ── */
+    .terminal-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      opacity: 0;
+      animation: fade-up 0.4s ease forwards;
+    }
+
+    .terminal-head {
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dot-r { background: #ef4444; }
+    .dot-y { background: #f59e0b; }
+    .dot-g { background: #22c55e; }
+
+    .terminal-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+
+    .terminal-status {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      border: 1px solid;
+    }
+
+    .terminal-status.running {
+      color: var(--warn);
+      border-color: rgba(245,158,11,0.3);
+      background: rgba(245,158,11,0.07);
+    }
+
+    .terminal-status.done {
+      color: var(--accent3);
+      border-color: rgba(16,185,129,0.3);
+      background: rgba(16,185,129,0.07);
+    }
+
+    .terminal-status.error {
+      color: var(--danger);
+      border-color: rgba(239,68,68,0.3);
+      background: rgba(239,68,68,0.07);
+    }
+
+    .terminal-body {
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+      color: #8ba5c5;
+      max-height: 340px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .terminal-body::-webkit-scrollbar { width: 4px; }
+    .terminal-body::-webkit-scrollbar-track { background: transparent; }
+    .terminal-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+    .log-status { color: var(--accent3); }
+    .log-log { color: #8ba5c5; }
+    .log-complete { color: var(--accent); }
+    .log-error { color: var(--danger); }
+
+    /* ── RESULT BOX ── */
+    .result-box {
+      margin-top: 16px;
+      background: var(--surface);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .result-head {
+      padding: 14px 20px;
+      background: rgba(0,229,255,0.04);
+      border-bottom: 1px solid rgba(0,229,255,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .result-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .result-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .analyzer-btn {
+      background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(124,58,237,0.1));
+      border: 1px solid rgba(124,58,237,0.35);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: #a78bfa;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      text-decoration: none;
+    }
+    .analyzer-btn:hover { border-color: rgba(124,58,237,0.6); box-shadow: 0 0 16px rgba(124,58,237,0.15); }
+
+    .result-pre {
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.8;
+      color: #a0c4e8;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .result-pre .hl-key { color: #64748b; }
+    .result-pre .hl-val { color: var(--accent); }
+    .result-pre .hl-section { color: #a78bfa; }
+    .result-pre .hl-header { color: var(--accent3); }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      z-index: 999;
+      transform: translateY(60px);
+      opacity: 0;
+      transition: all 0.25s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--accent3); }
+    .toast.error { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .anim-1 { opacity: 0; animation: fade-up 0.5s ease forwards 0.1s; }
+    .anim-2 { opacity: 0; animation: fade-up 0.5s ease forwards 0.2s; }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <div class="container">
+    <!-- NAV -->
+    <nav>
+      <a href="/" class="nav-brand">
+        <div class="nav-logo">K6 Suite</div>
+        <div class="nav-sep"></div>
+        <div class="nav-page">Runner</div>
+      </a>
+      <a href="/" class="nav-back">← Voltar</a>
+    </nav>
+
+    <!-- HEADER -->
+    <div class="page-header">
+      <div class="page-title">Rodar Teste</div>
+      <p class="page-sub">Configure e dispare testes de carga com k6</p>
+    </div>
+
+    <!-- MAIN LAYOUT -->
+    <div class="form-layout">
+      <!-- LEFT: FORM -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+
+        <!-- URL + Method -->
+        <div class="card anim-1">
+          <div class="card-head">
+            <span class="card-head-icon">🌐</span>
+            <span class="card-head-title">Endpoint</span>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label>Método HTTP</label>
+              <div class="method-tabs">
+                <button class="method-btn active" onclick="setMethod('GET', this)">GET</button>
+                <button class="method-btn" onclick="setMethod('POST', this)">POST</button>
+                <button class="method-btn" onclick="setMethod('PUT', this)">PUT</button>
+                <button class="method-btn" onclick="setMethod('PATCH', this)">PATCH</button>
+                <button class="method-btn" onclick="setMethod('DELETE', this)">DELETE</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>URL <span class="required">*</span></label>
+              <input type="url" id="url" class="input" placeholder="https://api.exemplo.com/endpoint" oninput="updateSummary()" />
+            </div>
+            <div class="field" id="body-field" style="display:none">
+              <label>Request Body (JSON)</label>
+              <textarea id="body" class="textarea" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <div class="field">
+              <label>Token de Autenticação</label>
+              <input type="password" id="token" class="input" placeholder="Bearer token (opcional)" />
+              <span class="input-hint">Enviado como Authorization: Bearer {token}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Test Type -->
+        <div class="card anim-1">
+          <div class="card-head">
+            <span class="card-head-icon">🎯</span>
+            <span class="card-head-title">Tipo de Teste</span>
+          </div>
+          <div class="card-body">
+            <div class="test-types">
+              <label class="type-card">
+                <input type="radio" name="testType" value="smoke" onchange="updateSummary()" />
+                <div class="type-label">
+                  <span class="type-emoji">🔬</span>
+                  <span class="type-name">Smoke</span>
+                  <span class="type-desc">Valida o básico com carga mínima</span>
+                </div>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="testType" value="load" onchange="updateSummary()" checked />
+                <div class="type-label">
+                  <span class="type-emoji">📈</span>
+                  <span class="type-name">Load</span>
+                  <span class="type-desc">Carga normal esperada em produção</span>
+                </div>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="testType" value="stress" onchange="updateSummary()" />
+                <div class="type-label">
+                  <span class="type-emoji">💥</span>
+                  <span class="type-name">Stress</span>
+                  <span class="type-desc">Encontra o ponto de ruptura</span>
+                </div>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="testType" value="spike" onchange="updateSummary()" />
+                <div class="type-label">
+                  <span class="type-emoji">⚡</span>
+                  <span class="type-name">Spike</span>
+                  <span class="type-desc">Pico súbito de tráfego</span>
+                </div>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="testType" value="soak" onchange="updateSummary()" />
+                <div class="type-label">
+                  <span class="type-emoji">🌊</span>
+                  <span class="type-name">Soak</span>
+                  <span class="type-desc">Estabilidade ao longo do tempo</span>
+                </div>
+              </label>
+              <label class="type-card">
+                <input type="radio" name="testType" value="breakpoint" onchange="updateSummary()" />
+                <div class="type-label">
+                  <span class="type-emoji">🔴</span>
+                  <span class="type-name">Break</span>
+                  <span class="type-desc">Carga crescente até falha</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- VUs + Duration -->
+        <div class="card anim-2">
+          <div class="card-head">
+            <span class="card-head-icon">⚙️</span>
+            <span class="card-head-title">Configurações de Carga</span>
+          </div>
+          <div class="card-body">
+            <div class="field-row">
+              <div class="field">
+                <label>Usuários Virtuais (VUs) <span class="required">*</span></label>
+                <input type="number" id="vus" class="input" value="10" min="1" max="500" oninput="updateSummary()" />
+                <span class="input-hint">Usuários simultâneos. Max: 500</span>
+              </div>
+              <div class="field">
+                <label>Duração <span class="required">*</span></label>
+                <input type="text" id="duration" class="input" value="30s" placeholder="30s, 1m, 5m" oninput="updateSummary()" />
+                <span class="input-hint">Ex: 30s, 1m, 5m, 1h</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal output -->
+        <div id="terminal-section" style="display:none">
+          <div class="terminal-card">
+            <div class="terminal-head">
+              <div class="terminal-dots">
+                <div class="dot dot-r"></div>
+                <div class="dot dot-y"></div>
+                <div class="dot dot-g"></div>
+              </div>
+              <span class="terminal-title">k6 output</span>
+              <span class="terminal-status running" id="terminal-status">⟳ rodando</span>
+            </div>
+            <div class="terminal-body" id="terminal-body"></div>
+          </div>
+
+          <!-- Result summary -->
+          <div id="result-section" style="display:none">
+            <div class="result-box">
+              <div class="result-head">
+                <div class="result-title">📊 Resumo do Teste</div>
+                <div class="result-actions">
+                  <button class="copy-btn" onclick="copyResult()">⎘ Copiar</button>
+                  <a href="/analyzer" id="analyzer-link" class="analyzer-btn">
+                    ✦ Analisar com IA →
+                  </a>
+                </div>
+              </div>
+              <pre class="result-pre" id="result-pre"></pre>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: SIDEBAR -->
+      <div class="sidebar">
+        <!-- Run button -->
+        <button class="run-btn" id="run-btn" onclick="runTest()">
+          <span class="run-btn-icon">▶</span>
+          RODAR
+        </button>
+
+        <!-- Summary -->
+        <div class="summary-box">
+          <div class="summary-head">
+            <div class="summary-head-title">Configuração</div>
+          </div>
+          <div class="summary-items">
+            <div class="summary-item">
+              <span class="summary-key">Tipo</span>
+              <span class="summary-val" id="s-type">load</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-key">Método</span>
+              <span class="summary-val" id="s-method">GET</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-key">VUs</span>
+              <span class="summary-val" id="s-vus">10</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-key">Duração</span>
+              <span class="summary-val" id="s-dur">30s</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-key">URL</span>
+              <span class="summary-val" id="s-url" style="font-size:10px; word-break:break-all;">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info box -->
+        <div class="summary-box">
+          <div class="summary-head">
+            <div class="summary-head-title">Dica</div>
+          </div>
+          <div class="summary-items">
+            <p style="font-size: 12px; color: var(--muted); line-height: 1.6;" id="type-tip">
+              Teste de carga normal. Verifica performance com a quantidade de usuários configurada.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let selectedMethod = 'GET';
+    let resultText = '';
+    let lastRunMeta = { url: '', testType: 'load', vus: '', duration: '' };
+
+    const PEND_ORDER = 'k6suite:pendOrder';
+    const PEND_ITEM_PREFIX = 'k6suite:pend:';
+    const LEGACY_PENDING_KEY = 'k6suite:pendingSummaries';
+
+    function newPendId() {
+      return (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    }
+
+    function readPendOrder() {
+      try {
+        const raw = localStorage.getItem(PEND_ORDER);
+        if (!raw) return [];
+        const o = JSON.parse(raw);
+        return Array.isArray(o) ? o : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function writePendOrder(order) {
+      localStorage.setItem(PEND_ORDER, JSON.stringify(order));
+    }
+
+    /** Migra fila antiga (um JSON gigante) para 1 chave por rodada — evita falha no 3º teste. */
+    function migrateLegacyPendingQueue() {
+      const raw = localStorage.getItem(LEGACY_PENDING_KEY);
+      if (!raw) return;
+      try {
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr) || arr.length === 0) {
+          localStorage.removeItem(LEGACY_PENDING_KEY);
+          return;
+        }
+        const order = readPendOrder();
+        for (const item of arr) {
+          const id = newPendId();
+          localStorage.setItem(PEND_ITEM_PREFIX + id, JSON.stringify(item));
+          order.push(id);
+        }
+        writePendOrder(order);
+        localStorage.removeItem(LEGACY_PENDING_KEY);
+      } catch {
+        try { localStorage.removeItem(LEGACY_PENDING_KEY); } catch {}
+      }
+    }
+
+    function appendPendingForAnalyzer(item) {
+      migrateLegacyPendingQueue();
+      const id = newPendId();
+      localStorage.setItem(PEND_ITEM_PREFIX + id, JSON.stringify(item));
+      const order = readPendOrder();
+      order.push(id);
+      writePendOrder(order);
+    }
+
+    const TYPE_TIPS = {
+      smoke: "Roda com apenas 1 VU por 30s. Ideal para validar que o sistema responde antes de testes maiores.",
+      load: "Sobe para os VUs configurados e mantém por toda a duração. Simula carga normal de produção.",
+      stress: "Aumenta progressivamente além do normal. Revela o ponto onde o sistema começa a degradar.",
+      spike: "Alterna entre carga baixa e alta repentinamente. Simula eventos virais ou horários de pico.",
+      soak: "Mantém carga constante por muito tempo. Detecta memory leaks e degradação progressiva.",
+      breakpoint: "Aumenta sem parar até o sistema falhar. Mapeia o limite real de capacidade.",
+    };
+
+    function setMethod(method, btn) {
+      selectedMethod = method;
+      document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const bodyField = document.getElementById('body-field');
+      bodyField.style.display = ['POST', 'PUT', 'PATCH'].includes(method) ? 'flex' : 'none';
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const type = document.querySelector('input[name="testType"]:checked')?.value || 'load';
+      const vus = document.getElementById('vus').value;
+      const dur = document.getElementById('duration').value;
+      const url = document.getElementById('url').value;
+
+      document.getElementById('s-type').textContent = type;
+      document.getElementById('s-method').textContent = selectedMethod;
+      document.getElementById('s-vus').textContent = vus || '—';
+      document.getElementById('s-dur').textContent = dur || '—';
+      document.getElementById('s-url').textContent = url ? (url.length > 30 ? url.slice(0, 30) + '…' : url) : '—';
+      document.getElementById('type-tip').textContent = TYPE_TIPS[type] || '';
+    }
+
+    function appendLog(type, text) {
+      const body = document.getElementById('terminal-body');
+      const line = document.createElement('div');
+      line.className = `log-${type}`;
+      line.textContent = text;
+      body.appendChild(line);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast ${type} show`;
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function highlightResult(text) {
+      return text
+        .replace(/^(=== .+ ===)$/gm, '<span class="hl-header">$1</span>')
+        .replace(/^(── .+ ──+)$/gm, '<span class="hl-section">$1</span>')
+        .replace(/^([^:]+)(:)(.+)$/gm, (_, key, colon, val) =>
+          `<span class="hl-key">${key}${colon}</span><span class="hl-val">${val}</span>`
+        );
+    }
+
+    function copyResult() {
+      if (!resultText?.trim()) {
+        showToast('⚠️ Nenhum resultado para copiar', 'error');
+        return;
+      }
+
+      // 1) Copia para clipboard (conveniência imediata)
+      navigator.clipboard.writeText(resultText).then(() => {
+        showToast('✓ Copiado (e preparado para o Analyzer)');
+      }).catch(() => {
+        // Mesmo que o clipboard falhe (permissão), ainda salvamos para o Analyzer.
+        showToast('✓ Preparado para o Analyzer (clipboard bloqueado)', 'success');
+      });
+
+      // 2) Empilha como “pendente” (1 chave por rodada — não perde itens anteriores)
+      try {
+        appendPendingForAnalyzer({
+          text: resultText,
+          createdAt: Date.now(),
+          meta: { ...lastRunMeta },
+        });
+      } catch (e) {
+        console.warn('Fila Analyzer:', e);
+        showToast('⚠️ Não foi possível guardar na fila do Analyzer', 'error');
+      }
+    }
+
+    async function runTest() {
+      const url = document.getElementById('url').value.trim();
+      const vus = document.getElementById('vus').value;
+      const duration = document.getElementById('duration').value.trim();
+      const token = document.getElementById('token').value.trim();
+      const testType = document.querySelector('input[name="testType"]:checked')?.value || 'load';
+      const body = document.getElementById('body').value.trim();
+
+      if (!url) { showToast('⚠️ Informe a URL', 'error'); return; }
+      if (!vus || parseInt(vus) < 1) { showToast('⚠️ VUs deve ser >= 1', 'error'); return; }
+      if (!duration) { showToast('⚠️ Informe a duração', 'error'); return; }
+
+      const btn = document.getElementById('run-btn');
+      btn.disabled = true;
+      btn.classList.add('running');
+      btn.innerHTML = '<span class="run-btn-icon">⟳</span> RODANDO';
+
+      const termSection = document.getElementById('terminal-section');
+      const termBody = document.getElementById('terminal-body');
+      const termStatus = document.getElementById('terminal-status');
+      const resultSection = document.getElementById('result-section');
+
+      termSection.style.display = 'block';
+      resultSection.style.display = 'none';
+      termBody.innerHTML = '';
+      termStatus.className = 'terminal-status running';
+      termStatus.textContent = '⟳ rodando';
+      resultText = '';
+      lastRunMeta = { url, testType, vus: String(vus), duration };
+
+      termSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      try {
+        const response = await fetch('/api/run-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, vus: parseInt(vus), duration, token, testType, method: selectedMethod, body, testName: `${testType} – ${url}` }),
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const { type, data } = JSON.parse(line.slice(6));
+
+              if (type === 'status') appendLog('status', data);
+              else if (type === 'log') appendLog('log', data);
+              else if (type === 'complete') {
+                resultText = data;
+                document.getElementById('result-pre').innerHTML = highlightResult(data);
+                resultSection.style.display = 'block';
+                termStatus.className = 'terminal-status done';
+                termStatus.textContent = '✓ concluído';
+                showToast('✓ Teste concluído com sucesso!');
+                resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }
+              else if (type === 'error') {
+                appendLog('error', '❌ ' + data);
+                termStatus.className = 'terminal-status error';
+                termStatus.textContent = '✗ erro';
+                showToast('❌ ' + data, 'error');
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        appendLog('error', '❌ Falha de conexão: ' + err.message);
+        termStatus.className = 'terminal-status error';
+        termStatus.textContent = '✗ erro';
+        showToast('❌ Falha ao conectar com o servidor', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('running');
+        btn.innerHTML = '<span class="run-btn-icon">▶</span> RODAR';
+      }
+    }
+
+    // Init
+    updateSummary();
+  </script>
+</body>
+</html>

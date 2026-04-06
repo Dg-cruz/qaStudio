@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>K6 Analyzer — Performance Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #050810;
+      --surface: #0c1120;
+      --surface2: #111827;
+      --border: #1e2d45;
+      --accent: #00e5ff;
+      --accent2: #7c3aed;
+      --accent3: #10b981;
+      --danger: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --mono: 'Space Mono', monospace;
+      --sans: 'Syne', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-1 { width: 600px; height: 600px; background: rgba(124,58,237,0.08); top: -200px; right: -100px; }
+    .orb-2 { width: 400px; height: 400px; background: rgba(0,229,255,0.06); bottom: 0; left: -100px; }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    header {
+      padding: 40px 0 48px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    h1 {
+      font-family: var(--sans);
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    h1 span { color: var(--accent); }
+
+    .header-sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .status-pill {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent3);
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.2);
+      padding: 6px 14px;
+      border-radius: 100px;
+      letter-spacing: 1px;
+    }
+    .status-pill::before { content: '● '; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .section-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    #tests-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .test-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      width: 200px;
+    }
+    .card-title-input::placeholder { color: var(--muted); }
+
+    .remove-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .remove-btn:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.05); }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .metric-item {
+      background: var(--surface);
+      padding: 14px 16px;
+      position: relative;
+    }
+
+    .metric-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tooltip-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(100,116,139,0.2);
+      color: var(--muted);
+      font-size: 9px;
+      cursor: help;
+      position: relative;
+    }
+
+    /* Tooltip flutuante — renderizado via JS no body para nunca ficar atrás de nada */
+    #floating-tooltip {
+      position: fixed;
+      background: #1a2540;
+      border: 1px solid #1e2d45;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: 'Syne', sans-serif;
+      font-size: 11px;
+      color: #e2e8f0;
+      width: 220px;
+      line-height: 1.5;
+      z-index: 99999;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s, visibility 0.15s;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    #floating-tooltip.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+    #floating-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: #1e2d45;
+    }
+
+    .metric-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text);
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .metric-input:focus { border-color: var(--accent); }
+    .metric-input::placeholder { color: #2d3a4f; }
+
+    .paste-area {
+      padding: 14px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .paste-label {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .paste-label-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .paste-label-hint {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .paste-input {
+      width: 100%;
+      min-height: 72px;
+      max-height: 160px;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+      line-height: 1.6;
+    }
+    .paste-input:focus { border-color: var(--accent); border-style: solid; }
+    .paste-input::placeholder { color: #2d3a4f; }
+
+    .paste-feedback {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      min-height: 16px;
+      transition: all 0.2s;
+    }
+    .paste-feedback.ok { color: var(--accent3); }
+    .paste-feedback.warn { color: #f59e0b; }
+
+    .category-divider {
+      background: var(--surface2);
+      grid-column: 1 / -1;
+      padding: 8px 16px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+      border-top: 1px solid var(--border);
+    }
+
+    .actions-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      outline: none;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent2), #4f46e5);
+      color: white;
+      box-shadow: 0 0 30px rgba(124,58,237,0.3);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 40px rgba(124,58,237,0.5); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-export {
+      background: transparent;
+      border: 1px solid var(--accent3);
+      color: var(--accent3);
+    }
+    .btn-export:hover { background: rgba(16,185,129,0.08); transform: translateY(-1px); }
+
+    /* ── CHARTS SECTION ─────────────────────────────────────────────────── */
+    #charts-section {
+      display: none;
+      margin-bottom: 40px;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 860px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      animation: slideIn 0.4s ease;
+    }
+
+    .chart-card-header {
+      padding: 16px 20px 12px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .chart-badge {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .chart-badge-latency {
+      background: rgba(0,229,255,0.1);
+      color: var(--accent);
+      border: 1px solid rgba(0,229,255,0.2);
+    }
+
+    .chart-badge-reliability {
+      background: rgba(16,185,129,0.1);
+      color: var(--accent3);
+      border: 1px solid rgba(16,185,129,0.2);
+    }
+
+    .chart-card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .chart-card-subtitle {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    .chart-body {
+      padding: 20px;
+      position: relative;
+      height: 280px;
+    }
+
+    .chart-body canvas {
+      max-height: 240px;
+    }
+
+    /* ── RESULTS ─────────────────────────────────────────────────────────── */
+    #results-section { display: none; }
+
+    .result-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 24px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .result-badge {
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      color: white;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    .result-title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .result-body {
+      padding: 28px;
+      font-size: 14px;
+      line-height: 1.8;
+      color: #cbd5e1;
+    }
+
+    .result-body h1, .result-body h2, .result-body h3 {
+      font-family: var(--sans);
+      color: var(--text);
+      margin: 24px 0 10px;
+      font-weight: 700;
+    }
+    .result-body h2 { font-size: 16px; color: var(--accent); }
+    .result-body h3 { font-size: 14px; color: var(--accent3); }
+    .result-body strong { color: var(--text); }
+    .result-body ul, .result-body ol { padding-left: 20px; }
+    .result-body li { margin-bottom: 6px; }
+    .result-body p { margin-bottom: 12px; }
+    .result-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    .loading-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px;
+      gap: 20px;
+    }
+
+    .loading-ring {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 2px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--danger);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      z-index: 999;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── PRINT / PDF ───────────────────────────────────────────────────── */
+    @media print {
+      @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+      body { background: #fff !important; color: #111 !important; }
+      body::before, .orb { display: none !important; }
+      header, #tests-container, .actions-row,
+      .toast, .remove-btn, #loading-state { display: none !important; }
+      #results-section { display: block !important; }
+      .container { max-width: 100%; padding: 0; }
+
+      /* ── Gráficos no PDF ── */
+      #charts-section { display: block !important; margin: 0 0 20px 0; }
+      #charts-section > .section-header { display: none !important; }
+      .charts-grid { display: grid !important; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .chart-card { background: #fff !important; border: 1px solid #e2e8f0 !important; border-radius: 8px; page-break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .chart-card-header { background: #f8fafc !important; border-bottom: 1px solid #e2e8f0 !important; padding: 8px 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .chart-card-title { color: #111 !important; font-size: 11px; }
+      .chart-card-subtitle { color: #64748b !important; font-size: 9px; }
+      .chart-badge { font-size: 8px !important; }
+      .chart-badge-latency { background: #e0f7ff !important; color: #0284c7 !important; border-color: #bae6fd !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .chart-badge-reliability { background: #d1fae5 !important; color: #059669 !important; border-color: #6ee7b7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .chart-body { padding: 8px; height: auto !important; }
+      .chart-body canvas { display: none !important; }
+      .chart-body .pdf-chart-img { display: block !important; width: 100% !important; height: auto !important; border-radius: 4px; }
+      #pdf-header {
+        display: flex !important; align-items: center; gap: 12px;
+        border-bottom: 2px solid #7c3aed; padding-bottom: 12px; margin-bottom: 24px;
+      }
+      #pdf-header .pdf-logo {
+        width: 36px; height: 36px;
+        background: linear-gradient(135deg, #7c3aed, #00e5ff);
+        border-radius: 8px; display: flex; align-items: center;
+        justify-content: center; font-size: 18px; color: #fff; flex-shrink: 0;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      #pdf-header .pdf-title { font-size: 20px; font-weight: 800; color: #111; }
+      #pdf-header .pdf-subtitle { font-size: 10px; color: #64748b; letter-spacing: 1px; text-transform: uppercase; }
+      #pdf-header .pdf-meta { margin-left: auto; text-align: right; font-size: 10px; color: #64748b; }
+      #pdf-metrics-table { display: block !important; width: 100%; margin-bottom: 24px; page-break-inside: avoid; }
+      #pdf-metrics-table table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      #pdf-metrics-table th {
+        background: #f1f5f9; color: #475569; font-weight: 700; text-align: left;
+        padding: 6px 10px; border: 1px solid #e2e8f0; font-size: 10px;
+        letter-spacing: 0.5px; text-transform: uppercase;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      #pdf-metrics-table td { padding: 6px 10px; border: 1px solid #e2e8f0; color: #1e293b; font-family: 'Space Mono', monospace; font-size: 11px; }
+      #pdf-metrics-table tr:nth-child(even) td { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      #pdf-metrics-table .cat-row td {
+        background: #ede9fe; color: #5b21b6; font-weight: 700;
+        font-family: 'Syne', sans-serif; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .result-box { background: #fff !important; border: 1px solid #e2e8f0 !important; border-radius: 8px; page-break-inside: auto; }
+      .result-header { background: #f8fafc !important; border-bottom: 1px solid #e2e8f0 !important; padding: 12px 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .result-badge { background: #7c3aed !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .result-title { color: #111 !important; font-size: 14px; }
+      .result-body { color: #1e293b !important; padding: 20px; font-size: 12px; line-height: 1.7; }
+      .result-body h1 { font-size: 16px; color: #111 !important; }
+      .result-body h2 { font-size: 13px; color: #7c3aed !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .result-body h3 { font-size: 12px; color: #059669 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .result-body strong { color: #111 !important; }
+      .result-body hr { border-top: 1px solid #e2e8f0; }
+      h2 { page-break-after: avoid; }
+      ul, ol { page-break-inside: avoid; }
+    }
+
+    @media (max-width: 600px) {
+      #tests-container { grid-template-columns: 1fr; }
+      .metrics-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <div class="container">
+    <header>
+      <div class="logo-area">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h1>K6 <span>Analyzer</span></h1>
+          <div class="header-sub">Performance Intelligence Platform</div>
+        </div>
+      </div>
+      <div class="status-pill">AI-powered analysis</div>
+    </header>
+
+    <div class="section-header">
+      <span class="section-title">Resultados dos Testes</span>
+      <div class="section-line"></div>
+    </div>
+
+    <div id="tests-container"></div>
+
+    <div class="actions-row">
+      <button class="btn btn-ghost" onclick="addTest()">
+        <span>＋</span> Adicionar Teste
+      </button>
+      <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()">
+        <span>✦</span> Analisar com IA
+      </button>
+      <button class="btn btn-export" id="export-btn" onclick="exportPDF()" style="display:none">
+        <span>↓</span> Exportar PDF
+      </button>
+    </div>
+
+    <!-- ── CHARTS ──────────────────────────────────────────────────────── -->
+    <div id="charts-section">
+      <div class="section-header">
+        <span class="section-title">Visualização de Métricas</span>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="charts-grid">
+        <!-- Chart 1: Latency -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-badge chart-badge-latency">Latência</span>
+            <span class="chart-card-title">Tempos de Resposta</span>
+            <span class="chart-card-subtitle">ms</span>
+          </div>
+          <div class="chart-body">
+            <canvas id="chart-latency"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Reliability + Throughput -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-badge chart-badge-reliability">Confiabilidade</span>
+            <span class="chart-card-title">RPS & Taxa de Erro</span>
+            <span class="chart-card-subtitle">req/s · %</span>
+          </div>
+          <div class="chart-body">
+            <canvas id="chart-reliability"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI RESULTS ─────────────────────────────────────────────────── -->
+    <div id="results-section">
+      <div class="section-header">
+        <span class="section-title">Análise IA</span>
+        <div class="section-line"></div>
+      </div>
+
+      <div id="pdf-header" style="display:none">
+        <div class="pdf-logo">⚡</div>
+        <div>
+          <div class="pdf-title">K6 Analyzer</div>
+          <div class="pdf-subtitle">Performance Intelligence Platform</div>
+        </div>
+        <div class="pdf-meta" id="pdf-meta"></div>
+      </div>
+
+      <div id="pdf-metrics-table" style="display:none"></div>
+
+      <div class="result-box">
+        <div class="result-header">
+          <span class="result-badge">CLAUDE AI</span>
+          <span class="result-title" id="result-title">Análise de Performance K6</span>
+        </div>
+        <div id="loading-state" class="loading-state">
+          <div class="loading-ring"></div>
+          <span class="loading-text">PROCESSANDO MÉTRICAS...</span>
+        </div>
+        <div id="result-body" class="result-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div id="floating-tooltip"></div>
+
+  <script>
+    // ── FLOATING TOOLTIP (sempre na frente) ────────────────────────────────
+    const floatingTip = document.getElementById('floating-tooltip');
+    let tipTimeout = null;
+
+    document.addEventListener('mouseover', e => {
+      const icon = e.target.closest('.tooltip-icon');
+      if (!icon) return;
+      const text = icon.dataset.tooltip;
+      if (!text) return;
+
+      clearTimeout(tipTimeout);
+      floatingTip.textContent = text;
+      floatingTip.classList.add('visible');
+      positionTooltip(icon);
+    });
+
+    document.addEventListener('mousemove', e => {
+      const icon = e.target.closest('.tooltip-icon');
+      if (icon && icon.dataset.tooltip) positionTooltip(icon);
+    });
+
+    document.addEventListener('mouseout', e => {
+      const icon = e.target.closest('.tooltip-icon');
+      if (!icon) return;
+      tipTimeout = setTimeout(() => floatingTip.classList.remove('visible'), 80);
+    });
+
+    function positionTooltip(icon) {
+      const rect = icon.getBoundingClientRect();
+      const tipW = 220;
+      const tipH = floatingTip.offsetHeight || 60;
+      const margin = 10;
+
+      let left = rect.left + rect.width / 2 - tipW / 2;
+      let top  = rect.top - tipH - 10;
+
+      // Clamp horizontally
+      if (left < margin) left = margin;
+      if (left + tipW > window.innerWidth - margin) left = window.innerWidth - tipW - margin;
+
+      // Flip below if no space above
+      if (top < margin) top = rect.bottom + 10;
+
+      floatingTip.style.left = left + 'px';
+      floatingTip.style.top  = top  + 'px';
+    }
+  </script>
+
+  <script>
+    // ── Chart.js global defaults ───────────────────────────────────────────
+    Chart.defaults.color = '#64748b';
+    Chart.defaults.font.family = "'Space Mono', monospace";
+    Chart.defaults.font.size = 10;
+
+    const CHART_COLORS = [
+      { border: '#00e5ff', bg: 'rgba(0,229,255,0.15)' },
+      { border: '#7c3aed', bg: 'rgba(124,58,237,0.15)' },
+      { border: '#10b981', bg: 'rgba(16,185,129,0.15)' },
+      { border: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+      { border: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
+    ];
+
+    let latencyChart = null;
+    let reliabilityChart = null;
+
+    // ── METRICS CONFIG ─────────────────────────────────────────────────────
+    const METRICS = [
+      {
+        category: "⏱ LATÊNCIA",
+        fields: [
+          { key: 'http_req_duration_avg', label: 'http_req_duration avg', placeholder: 'ex: 245.3', unit: 'ms', tooltip: 'Tempo médio de resposta de todas as requisições HTTP. Indica a performance típica do sistema. Ideal: abaixo de 200ms para APIs.' },
+          { key: 'http_req_duration_p90', label: 'http_req_duration p90', placeholder: 'ex: 450.0', unit: 'ms', tooltip: 'Percentil 90 do tempo de resposta. 90% das requisições foram respondidas abaixo deste valor. Threshold recomendado: < 500ms.' },
+          { key: 'http_req_duration_p95', label: 'http_req_duration p95', placeholder: 'ex: 800.0', unit: 'ms', tooltip: 'Percentil 95 do tempo de resposta. Métrica padrão de SLA. 95% das requisições ficaram abaixo deste tempo. Alerta se > 1000ms.' },
+          { key: 'http_req_duration_p99', label: 'http_req_duration p99', placeholder: 'ex: 1200.0', unit: 'ms', tooltip: 'Percentil 99 do tempo de resposta. Representa os casos mais lentos. Indica picos e outliers. Crítico se > 2000ms.' },
+        ]
+      },
+      {
+        category: "🔁 THROUGHPUT",
+        fields: [
+          { key: 'http_reqs', label: 'http_reqs (total)', placeholder: 'ex: 15420', tooltip: 'Número total de requisições HTTP realizadas durante o teste.' },
+          { key: 'http_req_rate', label: 'http_reqs/s (RPS)', placeholder: 'ex: 85.6', tooltip: 'Taxa de requisições por segundo (Requests Per Second). Mede o throughput do sistema.' },
+          { key: 'vus', label: 'vus (usuários virtuais)', placeholder: 'ex: 100', tooltip: 'Número de usuários virtuais ativos simultâneos durante o teste.' },
+          { key: 'vus_max', label: 'vus_max (pico de VUs)', placeholder: 'ex: 150', tooltip: 'Número máximo de usuários virtuais atingido durante o teste.' },
+        ]
+      },
+      {
+        category: "✅ CONFIABILIDADE",
+        fields: [
+          { key: 'http_req_failed', label: 'http_req_failed (%)', placeholder: 'ex: 0.15', unit: '%', tooltip: 'Percentual de requisições que falharam. Crítico: qualquer valor > 1% merece atenção imediata.' },
+          { key: 'checks', label: 'checks passed (%)', placeholder: 'ex: 99.8', unit: '%', tooltip: 'Percentual de verificações customizadas que passaram.' },
+          { key: 'iterations', label: 'iterations (total)', placeholder: 'ex: 5140', tooltip: 'Total de iterações completas do script executadas.' },
+          { key: 'dropped_iterations', label: 'dropped_iterations', placeholder: 'ex: 0', tooltip: 'Iterações descartadas por falta de VUs disponíveis.' },
+        ]
+      },
+      {
+        category: "🔌 REDE",
+        fields: [
+          { key: 'http_req_waiting', label: 'http_req_waiting (TTFB)', placeholder: 'ex: 180.2', unit: 'ms', tooltip: 'Tempo até o primeiro byte (Time to First Byte).' },
+          { key: 'http_req_connecting', label: 'http_req_connecting', placeholder: 'ex: 12.4', unit: 'ms', tooltip: 'Tempo gasto estabelecendo conexão TCP.' },
+          { key: 'http_req_tls_handshaking', label: 'http_req_tls_handshaking', placeholder: 'ex: 45.1', unit: 'ms', tooltip: 'Tempo para completar o handshake TLS/SSL.' },
+          { key: 'http_req_sending', label: 'http_req_sending', placeholder: 'ex: 0.8', unit: 'ms', tooltip: 'Tempo para enviar os dados da requisição ao servidor.' },
+          { key: 'http_req_receiving', label: 'http_req_receiving', placeholder: 'ex: 5.2', unit: 'ms', tooltip: 'Tempo para receber os dados de resposta do servidor.' },
+          { key: 'data_received', label: 'data_received (KB)', placeholder: 'ex: 45230', unit: 'KB', tooltip: 'Total de dados recebidos durante o teste.' },
+          { key: 'data_sent', label: 'data_sent (KB)', placeholder: 'ex: 3840', unit: 'KB', tooltip: 'Total de dados enviados durante o teste.' },
+        ]
+      },
+    ];
+
+    let testCount = 0;
+
+    function addTest() {
+      testCount++;
+      const container = document.getElementById('tests-container');
+      const card = document.createElement('div');
+      card.className = 'test-card';
+      card.id = `test-${testCount}`;
+      card.dataset.id = testCount;
+
+      let metricsHtml = `<div class="metrics-grid">`;
+      for (const category of METRICS) {
+        metricsHtml += `<div class="category-divider">${category.category}</div>`;
+        for (const field of category.fields) {
+          metricsHtml += `
+            <div class="metric-item">
+              <div class="metric-label">
+                ${field.label}
+                <span class="tooltip-icon" data-tooltip="${field.tooltip}">?</span>
+              </div>
+              <input
+                type="text"
+                class="metric-input"
+                data-key="${field.key}"
+                placeholder="${field.placeholder || ''}"
+                oninput="onMetricInput()"
+              />
+            </div>`;
+        }
+      }
+      metricsHtml += `</div>`;
+
+      card.innerHTML = `
+        <div class="card-header">
+          <input type="text" class="card-title-input" placeholder="Nome do teste (ex: v1.0.0)" value="Teste ${testCount}" oninput="onMetricInput()" />
+          <button class="remove-btn" onclick="removeTest(${testCount})" title="Remover teste">×</button>
+        </div>
+        <div class="paste-area">
+          <div class="paste-label">
+            <span class="paste-label-text">⚡ Dados</span>
+            <span class="paste-label-hint">Cole o output do K6 para preencher automaticamente</span>
+          </div>
+          <textarea
+            class="paste-input"
+            placeholder="Cole aqui o resumo gerado pelo handleSummary do K6..."
+            oninput="parseAndFill(this)"
+          ></textarea>
+          <div class="paste-feedback" id="paste-feedback-${testCount}"></div>
+        </div>
+        ${metricsHtml}
+      `;
+
+      container.appendChild(card);
+    }
+
+    function removeTest(id) {
+      const card = document.getElementById(`test-${id}`);
+      if (card) {
+        card.style.animation = 'none';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        card.style.transition = 'all 0.2s';
+        setTimeout(() => { card.remove(); updateCharts(); }, 200);
+      }
+    }
+
+    function collectResults() {
+      const cards = document.querySelectorAll('.test-card');
+      const results = [];
+      cards.forEach(card => {
+        const label = card.querySelector('.card-title-input').value || 'Teste sem nome';
+        const metrics = {};
+        card.querySelectorAll('.metric-input').forEach(input => {
+          if (input.value.trim()) metrics[input.dataset.key] = input.value.trim();
+        });
+        if (Object.keys(metrics).length > 0) results.push({ label, metrics });
+      });
+      return results;
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function parseMarkdown(text) {
+      return text
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/^---$/gm, '<hr>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/^(?!<[hul]|<hr)(.+)$/gm, '<p>$1</p>')
+        .replace(/<p><\/p>/g, '');
+    }
+
+    // ── CHART UPDATE ───────────────────────────────────────────────────────
+    function onMetricInput() {
+      updateCharts();
+    }
+
+    function updateCharts() {
+      const results = collectResults();
+
+      // Only show charts if at least one test has relevant data
+      const hasLatency = results.some(r =>
+        r.metrics.http_req_duration_avg || r.metrics.http_req_duration_p90 ||
+        r.metrics.http_req_duration_p95 || r.metrics.http_req_duration_p99
+      );
+      const hasReliability = results.some(r =>
+        r.metrics.http_req_rate || r.metrics.http_req_failed || r.metrics.checks
+      );
+
+      if (!results.length || (!hasLatency && !hasReliability)) {
+        document.getElementById('charts-section').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('charts-section').style.display = 'block';
+      renderLatencyChart(results);
+      renderReliabilityChart(results);
+    }
+
+    function renderLatencyChart(results) {
+      const labels = results.map(r => r.label);
+
+      const datasets = [
+        {
+          label: 'avg',
+          data: results.map(r => parseFloat(r.metrics.http_req_duration_avg) || null),
+          backgroundColor: 'rgba(0,229,255,0.7)',
+          borderColor: '#00e5ff',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'p90',
+          data: results.map(r => parseFloat(r.metrics.http_req_duration_p90) || null),
+          backgroundColor: 'rgba(124,58,237,0.7)',
+          borderColor: '#7c3aed',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'p95',
+          data: results.map(r => parseFloat(r.metrics.http_req_duration_p95) || null),
+          backgroundColor: 'rgba(245,158,11,0.7)',
+          borderColor: '#f59e0b',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'p99',
+          data: results.map(r => parseFloat(r.metrics.http_req_duration_p99) || null),
+          backgroundColor: 'rgba(239,68,68,0.7)',
+          borderColor: '#ef4444',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+      ].filter(ds => ds.data.some(v => v !== null));
+
+      const ctx = document.getElementById('chart-latency').getContext('2d');
+
+      if (latencyChart) latencyChart.destroy();
+
+      latencyChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 500, easing: 'easeOutQuart' },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                color: '#94a3b8',
+                boxWidth: 10,
+                boxHeight: 10,
+                padding: 14,
+                font: { family: "'Space Mono', monospace", size: 10 },
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0c1120',
+              borderColor: '#1e2d45',
+              borderWidth: 1,
+              titleColor: '#e2e8f0',
+              bodyColor: '#94a3b8',
+              padding: 10,
+              callbacks: {
+                label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1) ?? '–'} ms`
+              }
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(30,45,69,0.6)' },
+              ticks: { color: '#64748b', maxRotation: 30 },
+            },
+            y: {
+              grid: { color: 'rgba(30,45,69,0.6)' },
+              ticks: {
+                color: '#64748b',
+                callback: v => v + ' ms'
+              },
+              // Reference line annotation via plugin — draw manually instead
+            }
+          }
+        },
+        plugins: [{
+          id: 'p95Threshold',
+          afterDraw(chart) {
+            // Draw a dashed red threshold line at 1000ms (common SLA limit)
+            const { ctx, chartArea, scales } = chart;
+            if (!scales.y) return;
+            const y = scales.y.getPixelForValue(1000);
+            if (y < chartArea.top || y > chartArea.bottom) return;
+            ctx.save();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(239,68,68,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(239,68,68,0.5)';
+            ctx.font = "9px 'Space Mono', monospace";
+            ctx.fillText('SLA 1000ms', chartArea.right - 66, y - 4);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    function renderReliabilityChart(results) {
+      const labels = results.map(r => r.label);
+
+      const ctx = document.getElementById('chart-reliability').getContext('2d');
+      if (reliabilityChart) reliabilityChart.destroy();
+
+      const rpsData       = results.map(r => parseFloat(r.metrics.http_req_rate) || null);
+      const errorData     = results.map(r => parseFloat(r.metrics.http_req_failed) || null);
+      // Erros por checks = 100 - checks passados (quanto maior, pior — mesma semântica de falhas)
+      const checksRawData = results.map(r => {
+        const v = parseFloat(r.metrics.checks);
+        return isNaN(v) ? null : parseFloat((100 - v).toFixed(2));
+      });
+      const checksData = checksRawData;
+
+      const datasets = [];
+
+      if (rpsData.some(v => v !== null)) {
+        datasets.push({
+          label: 'RPS',
+          data: rpsData,
+          backgroundColor: 'rgba(16,185,129,0.7)',
+          borderColor: '#10b981',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'yRPS',
+        });
+      }
+
+      if (errorData.some(v => v !== null)) {
+        datasets.push({
+          label: 'Falhas (%)',
+          data: errorData,
+          backgroundColor: 'rgba(239,68,68,0.7)',
+          borderColor: '#ef4444',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'yPct',
+        });
+      }
+
+      if (checksData.some(v => v !== null)) {
+        datasets.push({
+          label: 'Erros de Checks (%)',
+          data: checksData,
+          type: 'line',
+          backgroundColor: 'rgba(245,158,11,0.1)',
+          borderColor: '#f59e0b',
+          borderWidth: 2,
+          pointBackgroundColor: '#f59e0b',
+          pointRadius: 4,
+          tension: 0.3,
+          fill: false,
+          yAxisID: 'yPct',
+        });
+      }
+
+      const hasRPS = rpsData.some(v => v !== null);
+      const hasPct = errorData.some(v => v !== null) || checksData.some(v => v !== null);
+
+      reliabilityChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 500, easing: 'easeOutQuart' },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                color: '#94a3b8',
+                boxWidth: 10,
+                boxHeight: 10,
+                padding: 14,
+                font: { family: "'Space Mono', monospace", size: 10 },
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0c1120',
+              borderColor: '#1e2d45',
+              borderWidth: 1,
+              titleColor: '#e2e8f0',
+              bodyColor: '#94a3b8',
+              padding: 10,
+              callbacks: {
+                label: ctx => {
+                  const suffix = ctx.dataset.yAxisID === 'yPct' ? '%' : ' req/s';
+                  const val = ctx.parsed.y?.toFixed(2) ?? '–';
+                  if (ctx.dataset.label === 'Erros de Checks (%)') {
+                    return ` Erros de Checks: ${val}% (${(100 - parseFloat(val)).toFixed(2)}% passaram)`;
+                  }
+                  return ` ${ctx.dataset.label}: ${val}${suffix}`;
+                }
+              }
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(30,45,69,0.6)' },
+              ticks: { color: '#64748b', maxRotation: 30 },
+            },
+            yRPS: {
+              type: 'linear',
+              position: 'left',
+              display: hasRPS,
+              grid: { color: 'rgba(30,45,69,0.6)' },
+              ticks: { color: '#10b981', callback: v => v + '/s' },
+              title: { display: hasRPS, text: 'req/s', color: '#10b981', font: { size: 10 } },
+            },
+            yPct: {
+              type: 'linear',
+              position: 'right',
+              display: hasPct,
+              min: 0,
+              max: 100,
+              grid: { drawOnChartArea: !hasRPS, color: 'rgba(30,45,69,0.6)' },
+              ticks: { color: '#64748b', callback: v => v + '%' },
+              title: { display: hasPct, text: '%', color: '#64748b', font: { size: 10 } },
+            }
+          }
+        },
+        plugins: [{
+          id: 'errorThreshold',
+          afterDraw(chart) {
+            const { ctx, chartArea, scales } = chart;
+            const yPct = scales['yPct'];
+            if (!yPct) return;
+            const y = yPct.getPixelForValue(1);
+            if (y < chartArea.top || y > chartArea.bottom) return;
+            ctx.save();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(239,68,68,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(239,68,68,0.5)';
+            ctx.font = "9px 'Space Mono', monospace";
+            ctx.fillText('limite 1% erro', chartArea.right - 82, y - 4);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    // ── ANALYSIS ───────────────────────────────────────────────────────────
+    async function runAnalysis() {
+      const results = collectResults();
+
+      if (results.length === 0) {
+        showToast('⚠️ Adicione pelo menos um teste com métricas preenchidas');
+        return;
+      }
+
+      const btn = document.getElementById('analyze-btn');
+      const section = document.getElementById('results-section');
+      const loading = document.getElementById('loading-state');
+      const body = document.getElementById('result-body');
+      const title = document.getElementById('result-title');
+
+      btn.disabled = true;
+      section.style.display = 'block';
+      loading.style.display = 'flex';
+      body.innerHTML = '';
+
+      title.textContent = results.length > 1
+        ? `Comparação de ${results.length} Testes — ${results.map(r => r.label).join(' vs ')}`
+        : `Análise de Performance — ${results[0].label}`;
+
+      // Update charts before scrolling
+      updateCharts();
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ results })
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          showToast('❌ Erro: ' + data.error);
+        } else {
+          body.innerHTML = parseMarkdown(data.analysis);
+          document.getElementById('export-btn').style.display = 'inline-flex';
+        }
+      } catch (err) {
+        showToast('❌ Falha ao conectar com o servidor');
+        body.innerHTML = '<p style="color: var(--danger)">Erro ao processar análise. Verifique se o servidor está rodando.</p>';
+      } finally {
+        loading.style.display = 'none';
+        btn.disabled = false;
+      }
+    }
+
+    // ── PARSE & FILL ───────────────────────────────────────────────────────
+    const PARSE_MAP = [
+      { key: 'http_req_duration_avg',      pattern: /http_req_duration\s+avg\s*:\s*([\d.]+)/i },
+      { key: 'http_req_duration_p90',      pattern: /http_req_duration\s+p90\s*:\s*([\d.]+)/i },
+      { key: 'http_req_duration_p95',      pattern: /http_req_duration\s+p95\s*:\s*([\d.]+)/i },
+      { key: 'http_req_duration_p99',      pattern: /http_req_duration\s+p99\s*:\s*([\d.]+)/i },
+      { key: 'http_reqs',                  pattern: /http_reqs\s*\(total\)\s*:\s*([\d.]+)/i },
+      { key: 'http_req_rate',              pattern: /http_reqs\/s\s*\(RPS\)\s*:\s*([\d.]+)/i },
+      { key: 'vus',                        pattern: /vus\s*\(usu[aá]rios virtuais\)\s*:\s*([\d.]+)/i },
+      { key: 'vus_max',                    pattern: /vus_max\s*\(pico de VUs\)\s*:\s*([\d.]+)/i },
+      { key: 'http_req_failed',            pattern: /http_req_failed\s*\(%\)\s*:\s*([\d.]+)/i },
+      { key: 'checks',                     pattern: /checks\s+passed\s*\(%\)\s*:\s*([\d.]+)/i },
+      { key: 'iterations',                 pattern: /iterations\s*\(total\)\s*:\s*([\d.]+)/i },
+      { key: 'dropped_iterations',         pattern: /dropped_iterations\s*:\s*([\d.]+|N\/A)/i },
+      { key: 'http_req_waiting',           pattern: /http_req_waiting\s*\(TTFB\)\s*:\s*([\d.]+)/i },
+      { key: 'http_req_connecting',        pattern: /http_req_connecting\s*:\s*([\d.]+)/i },
+      { key: 'http_req_tls_handshaking',   pattern: /http_req_tls_handshaking\s*:\s*([\d.]+)/i },
+      { key: 'http_req_sending',           pattern: /http_req_sending\s*:\s*([\d.]+)/i },
+      { key: 'http_req_receiving',         pattern: /http_req_receiving\s*:\s*([\d.]+)/i },
+      { key: 'data_received',              pattern: /data_received\s*\(KB\)\s*:\s*([\d.]+)/i },
+      { key: 'data_sent',                  pattern: /data_sent\s*\(KB\)\s*:\s*([\d.]+)/i },
+    ];
+
+    function parseAndFill(textarea) {
+      const card = textarea.closest('.test-card');
+      const text = textarea.value;
+      const feedbackEl = card.querySelector('.paste-feedback');
+
+      if (!text.trim()) {
+        feedbackEl.textContent = '';
+        feedbackEl.className = 'paste-feedback';
+        card.querySelectorAll('.metric-input').forEach(inp => inp.value = '');
+        updateCharts();
+        return;
+      }
+
+      let filled = 0;
+      let skipped = 0;
+
+      for (const { key, pattern } of PARSE_MAP) {
+        const match = text.match(pattern);
+        const input = card.querySelector(`.metric-input[data-key="${key}"]`);
+        if (!input) continue;
+
+        if (match) {
+          const val = match[1].trim();
+          if (val.toLowerCase() === 'n/a') {
+            input.value = '';
+          } else {
+            input.value = val;
+            filled++;
+          }
+          input.style.transition = 'background 0.1s';
+          input.style.background = 'rgba(0,229,255,0.08)';
+          setTimeout(() => { input.style.background = ''; }, 800);
+        } else {
+          skipped++;
+        }
+      }
+
+      if (filled > 0) {
+        feedbackEl.textContent = `✓ ${filled} campo${filled !== 1 ? 's' : ''} preenchido${filled !== 1 ? 's' : ''} automaticamente` + (skipped > 0 ? ` · ${skipped} não encontrado${skipped !== 1 ? 's' : ''}` : '');
+        feedbackEl.className = 'paste-feedback ok';
+      } else {
+        feedbackEl.textContent = '⚠ Nenhum campo reconhecido — verifique o formato dos dados';
+        feedbackEl.className = 'paste-feedback warn';
+      }
+
+      updateCharts();
+    }
+
+    // ── EXPORT PDF ─────────────────────────────────────────────────────────
+    function exportPDF() {
+      const results = collectResults();
+      if (!results.length) { showToast('⚠️ Nenhum dado para exportar'); return; }
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('pdf-meta').innerHTML =
+        `Gerado em ${dateStr} às ${timeStr}<br>K6 Analyzer — Performance Intelligence`;
+
+      const METRIC_LABELS = {
+        http_req_duration_avg: 'http_req_duration avg',
+        http_req_duration_p90: 'http_req_duration p90',
+        http_req_duration_p95: 'http_req_duration p95',
+        http_req_duration_p99: 'http_req_duration p99',
+        http_reqs: 'http_reqs (total)',
+        http_req_rate: 'http_reqs/s (RPS)',
+        vus: 'vus',
+        vus_max: 'vus_max',
+        http_req_failed: 'http_req_failed (%)',
+        checks: 'checks passed (%)',
+        iterations: 'iterations',
+        dropped_iterations: 'dropped_iterations',
+        http_req_waiting: 'http_req_waiting (TTFB)',
+        http_req_connecting: 'http_req_connecting',
+        http_req_tls_handshaking: 'http_req_tls_handshaking',
+        http_req_sending: 'http_req_sending',
+        http_req_receiving: 'http_req_receiving',
+        data_received: 'data_received (KB)',
+        data_sent: 'data_sent (KB)',
+      };
+
+      const CATEGORIES = {
+        'LATÊNCIA': ['http_req_duration_avg','http_req_duration_p90','http_req_duration_p95','http_req_duration_p99'],
+        'THROUGHPUT': ['http_reqs','http_req_rate','vus','vus_max'],
+        'CONFIABILIDADE': ['http_req_failed','checks','iterations','dropped_iterations'],
+        'REDE': ['http_req_waiting','http_req_connecting','http_req_tls_handshaking','http_req_sending','http_req_receiving','data_received','data_sent'],
+      };
+
+      const allKeys = new Set();
+      results.forEach(r => Object.keys(r.metrics).forEach(k => allKeys.add(k)));
+
+      let thead = '<tr><th>Métrica</th>' + results.map(r => `<th>${r.label}</th>`).join('') + '</tr>';
+      let tbody = '';
+
+      for (const [cat, keys] of Object.entries(CATEGORIES)) {
+        const present = keys.filter(k => allKeys.has(k));
+        if (!present.length) continue;
+        tbody += `<tr class="cat-row"><td colspan="${results.length + 1}">${cat}</td></tr>`;
+        for (const key of present) {
+          const label = METRIC_LABELS[key] || key;
+          const cells = results.map(r => `<td>${r.metrics[key] ?? '—'}</td>`).join('');
+          tbody += `<tr><td>${label}</td>${cells}</tr>`;
+        }
+      }
+
+      document.getElementById('pdf-metrics-table').innerHTML =
+        `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+
+      // ── Converter canvas → <img> para aparecer no print ──────────────────
+      const chartIds = ['chart-latency', 'chart-reliability'];
+      const injectedImgs = [];
+
+      chartIds.forEach(id => {
+        const canvas = document.getElementById(id);
+        if (!canvas) return;
+        const body = canvas.closest('.chart-body');
+        if (!body) return;
+
+        // Gera PNG com fundo escuro (preserva cores do gráfico)
+        const offscreen = document.createElement('canvas');
+        offscreen.width = canvas.width;
+        offscreen.height = canvas.height;
+        const octx = offscreen.getContext('2d');
+        octx.fillStyle = '#ffffff';
+        octx.fillRect(0, 0, offscreen.width, offscreen.height);
+        octx.drawImage(canvas, 0, 0);
+
+        const img = document.createElement('img');
+        img.src = offscreen.toDataURL('image/png');
+        img.className = 'pdf-chart-img';
+        img.style.display = 'none'; // visível só no print via CSS
+        body.appendChild(img);
+        injectedImgs.push(img);
+      });
+
+      // Aguarda imagens carregarem e então imprime
+      setTimeout(() => {
+        window.print();
+        // Limpa as imagens injetadas após o print
+        setTimeout(() => injectedImgs.forEach(img => img.remove()), 500);
+      }, 120);
+    }
+
+    // Init
+    addTest();
+  </script>
+</body>
+</html>

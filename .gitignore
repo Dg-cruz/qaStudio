@@ -1,0 +1,22 @@
+## OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+## Secrets
+.env
+.env.*
+!.env.example
+
+## Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+## App artifacts
+k6-runner/tmp/
+k6-runner/static/
+

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>K6 Suite — Performance Testing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #03050a;
+      --surface: #080d18;
+      --border: #0f1d35;
+      --accent: #00e5ff;
+      --accent2: #7c3aed;
+      --accent3: #10b981;
+      --text: #dde6f0;
+      --muted: #4a6080;
+      --mono: 'Space Mono', monospace;
+      --display: 'Bebas Neue', sans-serif;
+      --body: 'DM Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      overflow: hidden;
+    }
+
+    /* ── BACKGROUND ── */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.025) 1px, transparent 1px);
+      background-size: 60px 60px;
+      z-index: 0;
+    }
+
+    .bg-scanlines {
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(130px);
+      pointer-events: none;
+      z-index: 0;
+      animation: orb-pulse 8s ease-in-out infinite;
+    }
+    .orb-a { width: 700px; height: 700px; background: rgba(124,58,237,0.07); top: -250px; right: -200px; animation-delay: 0s; }
+    .orb-b { width: 500px; height: 500px; background: rgba(0,229,255,0.05); bottom: -150px; left: -150px; animation-delay: -4s; }
+
+    @keyframes orb-pulse {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.08); }
+    }
+
+    /* ── LAYOUT ── */
+    .page {
+      position: relative;
+      z-index: 1;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+    }
+
+    /* ── HEADER ── */
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 20px;
+      opacity: 0;
+      animation: fade-up 0.6s ease forwards 0.1s;
+    }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 16px;
+      opacity: 0;
+      animation: fade-up 0.6s ease forwards 0.2s;
+    }
+
+    .brand-logo {
+      font-family: var(--display);
+      font-size: clamp(72px, 12vw, 140px);
+      line-height: 0.9;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #ffffff 0%, var(--accent) 50%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .brand-sub {
+      font-family: var(--display);
+      font-size: clamp(16px, 3vw, 28px);
+      letter-spacing: 8px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .tagline {
+      font-size: 14px;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 56px;
+      max-width: 380px;
+      line-height: 1.7;
+      opacity: 0;
+      animation: fade-up 0.6s ease forwards 0.35s;
+    }
+
+    /* ── CARDS ── */
+    .cards {
+      display: flex;
+      gap: 20px;
+      opacity: 0;
+      animation: fade-up 0.6s ease forwards 0.5s;
+    }
+
+    @media (max-width: 580px) {
+      .cards { flex-direction: column; width: 100%; max-width: 340px; }
+    }
+
+    .card {
+      position: relative;
+      width: 280px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px 28px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: hidden;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.3s;
+      border-radius: inherit;
+    }
+
+    .card-runner::before {
+      background: radial-gradient(ellipse at top left, rgba(0,229,255,0.08), transparent 70%);
+    }
+    .card-analyzer::before {
+      background: radial-gradient(ellipse at top right, rgba(124,58,237,0.1), transparent 70%);
+    }
+
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    }
+    .card:hover::before { opacity: 1; }
+    .card-runner:hover { border-color: rgba(0,229,255,0.35); box-shadow: 0 24px 60px rgba(0,229,255,0.08); }
+    .card-analyzer:hover { border-color: rgba(124,58,237,0.4); box-shadow: 0 24px 60px rgba(124,58,237,0.1); }
+
+    .card-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .card-runner .card-icon {
+      background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,229,255,0.05));
+      border: 1px solid rgba(0,229,255,0.2);
+    }
+
+    .card-analyzer .card-icon {
+      background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(124,58,237,0.05));
+      border: 1px solid rgba(124,58,237,0.2);
+    }
+
+    .card-tag {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: inline-flex;
+      width: fit-content;
+    }
+
+    .card-runner .card-tag {
+      background: rgba(0,229,255,0.08);
+      color: var(--accent);
+      border: 1px solid rgba(0,229,255,0.15);
+    }
+
+    .card-analyzer .card-tag {
+      background: rgba(124,58,237,0.1);
+      color: #a78bfa;
+      border: 1px solid rgba(124,58,237,0.2);
+    }
+
+    .card-title {
+      font-family: var(--display);
+      font-size: 32px;
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+
+    .card-runner .card-title { color: var(--accent); }
+    .card-analyzer .card-title { color: #a78bfa; }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.65;
+      flex: 1;
+    }
+
+    .card-arrow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      margin-top: 4px;
+      transition: gap 0.2s;
+    }
+
+    .card:hover .card-arrow { gap: 10px; }
+
+    .card-runner .card-arrow { color: var(--accent); }
+    .card-analyzer .card-arrow { color: #a78bfa; }
+
+    /* ── DIVIDER ── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .divider-line {
+      width: 1px;
+      height: 60px;
+      background: linear-gradient(to bottom, transparent, var(--border), transparent);
+    }
+
+    .divider-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      opacity: 0;
+      animation: fade-up 0.6s ease forwards 0.8s;
+      white-space: nowrap;
+    }
+
+    .footer span { color: var(--accent3); }
+
+    /* ── STATUS PILL ── */
+    .status-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 48px;
+      opacity: 0;
+      animation: fade-up 0.6s ease forwards 0.65s;
+    }
+
+    .pill {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      padding: 5px 12px;
+      border-radius: 100px;
+      border: 1px solid;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pill-k6 {
+      border-color: rgba(16,185,129,0.25);
+      color: var(--accent3);
+      background: rgba(16,185,129,0.05);
+    }
+    .pill-k6.offline {
+      border-color: rgba(239,68,68,0.25);
+      color: #ef4444;
+      background: rgba(239,68,68,0.05);
+    }
+
+    .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 2s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 580px) {
+      .divider { display: none; }
+      html, body { overflow: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-scanlines"></div>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <div class="page">
+    <div class="eyebrow">Performance Testing Suite</div>
+
+    <div class="brand">
+      <div class="brand-logo">K6</div>
+      <div class="brand-sub">SUITE</div>
+    </div>
+
+    <p class="tagline">
+      Rode testes de carga e analise resultados com inteligência artificial.
+    </p>
+
+    <div class="status-bar">
+      <div class="pill pill-k6" id="k6-pill">
+        <div class="pill-dot"></div>
+        <span id="k6-status-text">Verificando k6...</span>
+      </div>
+    </div>
+
+    <div class="cards">
+      <!-- Card 1: Runner -->
+      <a href="/runner" class="card card-runner">
+        <div class="card-icon">🚀</div>
+        <div class="card-tag">Executar</div>
+        <div class="card-title">Rodar Teste</div>
+        <p class="card-desc">
+          Configure e dispare testes de carga — smoke, load, stress, spike, soak ou breakpoint — diretamente pelo navegador.
+        </p>
+        <div class="card-arrow">
+          Acessar <span>→</span>
+        </div>
+      </a>
+
+      <!-- Divider -->
+      <div class="divider">
+        <div class="divider-line"></div>
+        <div class="divider-dot"></div>
+        <div class="divider-line"></div>
+      </div>
+
+      <!-- Card 2: Analyzer -->
+      <a href="/analyzer" class="card card-analyzer">
+        <div class="card-icon">📊</div>
+        <div class="card-tag">Analisar</div>
+        <div class="card-title">K6 Analyzer</div>
+        <p class="card-desc">
+          Cole métricas de múltiplos testes, visualize gráficos comparativos e obtenha diagnóstico de IA sobre a performance.
+        </p>
+        <div class="card-arrow">
+          Acessar <span>→</span>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="footer">
+    K6 RUNNER &nbsp;·&nbsp; <span>http://127.0.0.1:5000</span>
+  </div>
+
+  <script>
+    // Check k6 status
+    fetch('/api/k6-status')
+      .then(r => r.json())
+      .then(data => {
+        const pill = document.getElementById('k6-pill');
+        const text = document.getElementById('k6-status-text');
+        if (data.installed) {
+          text.textContent = 'k6 instalado';
+        } else {
+          pill.classList.add('offline');
+          text.textContent = 'k6 não encontrado';
+        }
+      })
+      .catch(() => {
+        document.getElementById('k6-status-text').textContent = 'status desconhecido';
+      });
+  </script>
+</body>
+</html>
