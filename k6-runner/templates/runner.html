@@ -681,6 +681,14 @@
           </div>
           <div class="card-body">
             <div class="field">
+              <label>Importar via cURL</label>
+              <textarea id="curl-import" class="textarea" style="min-height:100px;font-size:11px" placeholder="Cole aqui o comando curl (ex.: curl -X POST 'https://api...' -H 'Content-Type: application/json' -d '{...}')"></textarea>
+              <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+                <button type="button" class="method-btn" style="padding:8px 16px;background:rgba(0,229,255,0.08);border-color:rgba(0,229,255,0.35);color:var(--accent)" onclick="applyCurlImport()">Aplicar ao formulário</button>
+                <span class="input-hint">Preenche URL, método, headers, body e token (Bearer) quando possível.</span>
+              </div>
+            </div>
+            <div class="field">
               <label>Método HTTP</label>
               <div class="method-tabs">
                 <button class="method-btn active" onclick="setMethod('GET', this)">GET</button>
@@ -702,6 +710,11 @@
               <label>Token de Autenticação</label>
               <input type="password" id="token" class="input" placeholder="Bearer token (opcional)" />
               <span class="input-hint">Enviado como Authorization: Bearer {token}</span>
+            </div>
+            <div class="field">
+              <label>Headers (JSON)</label>
+              <textarea id="headers" class="textarea" placeholder='{"x-api-key":"abc","x-tenant":"qa"}'></textarea>
+              <span class="input-hint">Opcional. Deve ser um JSON com pares chave/valor (ex.: {"Accept":"application/json"}).</span>
             </div>
           </div>
         </div>
@@ -938,6 +951,174 @@
       writePendOrder(order);
     }
 
+    function tokenizeShellLine(s) {
+      const tokens = [];
+      let i = 0;
+      const len = s.length;
+      while (i < len) {
+        while (i < len && /\s/.test(s[i])) i++;
+        if (i >= len) break;
+        const q = s[i];
+        if (q === "'" || q === '"') {
+          i++;
+          let buf = '';
+          while (i < len && s[i] !== q) {
+            if (q === '"' && s[i] === '\\' && i + 1 < len) { buf += s[i + 1]; i += 2; continue; }
+            buf += s[i++];
+          }
+          if (i < len && s[i] === q) i++;
+          tokens.push(buf);
+        } else {
+          let buf = '';
+          while (i < len && !/\s/.test(s[i])) buf += s[i++];
+          tokens.push(buf);
+        }
+      }
+      return tokens;
+    }
+
+    function normalizeCurlInput(raw) {
+      let s = String(raw || '').trim();
+      s = s.replace(/\r\n/g, '\n').replace(/\\\n/g, ' ').replace(/\\\r?\n/g, ' ');
+      const lines = s.split('\n').map((l) => l.trim()).filter(Boolean);
+      return lines.join(' ');
+    }
+
+    function isHttpUrl(t) {
+      return /^https?:\/\//i.test(t);
+    }
+
+    function parseCurlCommand(raw) {
+      const line = normalizeCurlInput(raw);
+      if (!line) return { error: 'Cole um comando curl.' };
+      const lower = line.toLowerCase();
+      if (!lower.startsWith('curl') && !lower.startsWith('curl.exe')) {
+        return { error: 'O texto deve começar com curl.' };
+      }
+      const tokens = tokenizeShellLine(line);
+      let i = 0;
+      if (tokens.length && /^curl(\.exe)?$/i.test(tokens[0])) i++;
+
+      const NO_ARG = new Set(['-s','-silent','-ss','-sS','-S','-l','-L','--location','-k','--insecure','-i','--include','-v','--verbose','--compressed','-g','--globoff','--http1.1','--http2']);
+
+      let method = 'GET';
+      const headers = {};
+      let body = '';
+      let url = '';
+
+      while (i < tokens.length) {
+        const t = tokens[i];
+        const tl = t.toLowerCase();
+
+        if (tl === '-x' || tl === '--request') {
+          if (i + 1 < tokens.length) method = String(tokens[i + 1]).toUpperCase();
+          i += 2;
+          continue;
+        }
+        if (tl === '-h' || tl === '--header') {
+          if (i + 1 >= tokens.length) { i++; continue; }
+          const hv = tokens[i + 1];
+          const colon = hv.indexOf(':');
+          if (colon > 0) {
+            const name = hv.slice(0, colon).trim();
+            const val = hv.slice(colon + 1).trim();
+            if (name) headers[name] = val;
+          }
+          i += 2;
+          continue;
+        }
+        if (tl === '-d' || tl === '--data' || tl === '--data-raw' || tl === '--data-binary') {
+          if (i + 1 < tokens.length) body = tokens[i + 1];
+          i += 2;
+          continue;
+        }
+        if (tl === '-b' || tl === '--cookie') {
+          if (i + 1 < tokens.length) headers['Cookie'] = (headers['Cookie'] ? headers['Cookie'] + '; ' : '') + tokens[i + 1];
+          i += 2;
+          continue;
+        }
+        if (tl === '--url') {
+          if (i + 1 < tokens.length) url = tokens[i + 1];
+          i += 2;
+          continue;
+        }
+        if (tl.startsWith('-')) {
+          if (NO_ARG.has(tl)) { i++; continue; }
+          if (tl.startsWith('--') && tokens[i].includes('=')) {
+            i++;
+            continue;
+          }
+          i++;
+          continue;
+        }
+        if (isHttpUrl(t)) {
+          url = t;
+          i++;
+          continue;
+        }
+        i++;
+      }
+
+      if (!url) return { error: 'Não encontrei URL (http/https) no curl.' };
+
+      let token = '';
+      const authKey = Object.keys(headers).find((k) => k.toLowerCase() === 'authorization');
+      if (authKey) {
+        const av = String(headers[authKey] || '');
+        const m = av.match(/^Bearer\s+(.+)$/i);
+        if (m) {
+          token = m[1].trim();
+          delete headers[authKey];
+        }
+      }
+
+      return { url, method, headers, body, token };
+    }
+
+    function setMethodByName(method) {
+      const upper = String(method || 'GET').toUpperCase();
+      selectedMethod = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(upper) ? upper : 'GET';
+      document.querySelectorAll('.method-btn').forEach((b) => {
+        b.classList.toggle('active', b.textContent.trim().toUpperCase() === selectedMethod);
+      });
+      const bodyField = document.getElementById('body-field');
+      bodyField.style.display = ['POST', 'PUT', 'PATCH'].includes(selectedMethod) ? 'flex' : 'none';
+      updateSummary();
+    }
+
+    function applyCurlImport() {
+      const ta = document.getElementById('curl-import');
+      const parsed = parseCurlCommand(ta?.value || '');
+      if (parsed.error) {
+        showToast('⚠️ ' + parsed.error, 'error');
+        return;
+      }
+      document.getElementById('url').value = parsed.url;
+      setMethodByName(parsed.method);
+      document.getElementById('token').value = parsed.token || '';
+      const headerKeys = Object.keys(parsed.headers || {});
+      document.getElementById('headers').value = headerKeys.length ? JSON.stringify(parsed.headers, null, 0) : '';
+      const bodyEl = document.getElementById('body');
+      if (parsed.body) {
+        const b = parsed.body.trim();
+        if (b.startsWith('@')) {
+          showToast('⚠️ Body com @arquivo não é suportado; cole o JSON manualmente', 'error');
+          bodyEl.value = '';
+        } else {
+          try {
+            const j = JSON.parse(b);
+            bodyEl.value = JSON.stringify(j, null, 2);
+          } catch {
+            bodyEl.value = parsed.body;
+          }
+        }
+      } else {
+        bodyEl.value = '';
+      }
+      updateSummary();
+      showToast('✓ Formulário preenchido a partir do curl');
+    }
+
     const TYPE_TIPS = {
       smoke: "Roda com apenas 1 VU por 30s. Ideal para validar que o sistema responde antes de testes maiores.",
       load: "Sobe para os VUs configurados e mantém por toda a duração. Simula carga normal de produção.",
@@ -1029,10 +1210,22 @@
       const token = document.getElementById('token').value.trim();
       const testType = document.querySelector('input[name="testType"]:checked')?.value || 'load';
       const body = document.getElementById('body').value.trim();
+      const headersRaw = document.getElementById('headers')?.value?.trim() || '';
 
       if (!url) { showToast('⚠️ Informe a URL', 'error'); return; }
       if (!vus || parseInt(vus) < 1) { showToast('⚠️ VUs deve ser >= 1', 'error'); return; }
       if (!duration) { showToast('⚠️ Informe a duração', 'error'); return; }
+
+      let headers = {};
+      if (headersRaw) {
+        try {
+          headers = JSON.parse(headersRaw);
+          if (!headers || typeof headers !== 'object' || Array.isArray(headers)) throw new Error('Formato inválido');
+        } catch {
+          showToast('⚠️ Headers inválidos: use JSON (objeto)', 'error');
+          return;
+        }
+      }
 
       const btn = document.getElementById('run-btn');
       btn.disabled = true;
@@ -1058,7 +1251,7 @@
         const response = await fetch('/api/run-test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, vus: parseInt(vus), duration, token, testType, method: selectedMethod, body, testName: `${testType} – ${url}` }),
+          body: JSON.stringify({ url, vus: parseInt(vus), duration, token, headers, testType, method: selectedMethod, body, testName: `${testType} – ${url}` }),
         });
 
         const reader = response.body.getReader();

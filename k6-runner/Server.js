@@ -11,7 +11,7 @@ const https = require("https");
 const { v4: uuidv4 } = require("uuid");
 
 const app = express();
-const PORT = 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "static")));
@@ -135,10 +135,12 @@ function buildStages(testType, vus, totalMs) {
 }
 
 // ── Simulador K6 nativo ───────────────────────────────────────────────────
-async function runSimulator({ url, vus, duration, token, testType, method, body }, sendEvent) {
+async function runSimulator({ url, vus, duration, token, headers, testType, method, body }, sendEvent) {
   const durationMs = parseDuration(duration);
   const vuCount    = parseInt(vus) || 10;
+  const userHeaders = headers && typeof headers === "object" && !Array.isArray(headers) ? headers : {};
   const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+  const mergedHeaders = { ...userHeaders, ...authHeader };
   const stages     = buildStages(testType, vuCount, durationMs);
 
   sendEvent("status", `🔬 [SIMULADOR] k6 não encontrado — rodando simulação Node.js nativa`);
@@ -168,7 +170,7 @@ async function runSimulator({ url, vus, duration, token, testType, method, body 
       const promises  = [];
       for (let i = 0; i < batchSize; i++) {
         if (Date.now() >= stageEnd) break;
-        promises.push(makeRequest(url, method, authHeader, body));
+        promises.push(makeRequest(url, method, mergedHeaders, body));
       }
       const results = await Promise.all(promises);
       for (const r of results) {
@@ -235,7 +237,10 @@ async function runSimulator({ url, vus, duration, token, testType, method, body 
 }
 
 // ── K6 script generator ───────────────────────────────────────────────────
-function generateK6Script({ url, vus, duration, token, testType, method, body }) {
+function generateK6Script({ url, vus, duration, token, headers, testType, method, body }) {
+  const userHeaders =
+    headers && typeof headers === "object" && !Array.isArray(headers) ? headers : {};
+  const userHeadersJson = JSON.stringify(userHeaders);
   const authHeader = token ? `"Authorization": "Bearer ${token}",` : "";
   const httpMethod = (method || "GET").toUpperCase();
   const hasBody    = ["POST", "PUT", "PATCH"].includes(httpMethod) && body;
@@ -306,7 +311,8 @@ function generateK6Script({ url, vus, duration, token, testType, method, body })
 import { check, sleep } from "k6";
 ${scenarios[testType] || scenarios.load}
 export default function () {
-  const params = { headers: { ${authHeader} "Content-Type": "application/json" } };
+  const userHeaders = ${userHeadersJson};
+  const params = { headers: { ...userHeaders, ${authHeader} "Content-Type": "application/json" } };
   ${hasBody ? `const payload = ${JSON.stringify(bodyStr || "{}")};` : ""}
   const res = ${requestCall};
   check(res, { "status 2xx": (r) => r.status >= 200 && r.status < 300, "response time < 2s": (r) => r.timings.duration < 2000 });
@@ -361,7 +367,7 @@ app.get("/api/k6-status", (req, res) => res.json({ installed: isK6Installed(), s
 
 // ── Run test ──────────────────────────────────────────────────────────────
 app.post("/api/run-test", async (req, res) => {
-  const { url, vus, duration, token, testType, method, body } = req.body;
+  const { url, vus, duration, token, headers, testType, method, body } = req.body;
   if (!url) return res.status(400).json({ error: "URL é obrigatória" });
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -370,7 +376,9 @@ app.post("/api/run-test", async (req, res) => {
 
   const sendEvent = (type, data) => { try { res.write(`data: ${JSON.stringify({ type, data })}\n\n`); } catch {} };
 
-  const params = { url, vus: parseInt(vus)||10, duration: duration||"30s", token: token||"", testType: testType||"load", method: method||"GET", body };
+  const safeHeaders =
+    headers && typeof headers === "object" && !Array.isArray(headers) ? headers : {};
+  const params = { url, vus: parseInt(vus)||10, duration: duration||"30s", token: token||"", headers: safeHeaders, testType: testType||"load", method: method||"GET", body };
 
   sendEvent("status", `🚀 Iniciando ${params.testType.toUpperCase()} test em ${url}...`);
 
@@ -443,11 +451,34 @@ app.post("/analyze", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  const k6Ok = isK6Installed();
-  console.log(`\n🚀 K6 Suite rodando em http://127.0.0.1:${PORT}`);
-  console.log(`   Home      → http://127.0.0.1:${PORT}/`);
-  console.log(`   Runner    → http://127.0.0.1:${PORT}/runner`);
-  console.log(`   Analyzer  → http://127.0.0.1:${PORT}/analyzer`);
-  console.log(`\n   k6 instalado : ${k6Ok ? "✅ Sim (modo real)" : "⚠️  Não (modo simulador ativo)"}\n`);
-});
+function startServer(port) {
+  const server = app.listen(port, () => {
+    const k6Ok = isK6Installed();
+    console.log(`\n🚀 K6 Suite rodando em http://127.0.0.1:${port}`);
+    console.log(`   Home      → http://127.0.0.1:${port}/`);
+    console.log(`   Runner    → http://127.0.0.1:${port}/runner`);
+    console.log(`   Analyzer  → http://127.0.0.1:${port}/analyzer`);
+    console.log(`\n   k6 instalado : ${k6Ok ? "✅ Sim (modo real)" : "⚠️  Não (modo simulador ativo)"}\n`);
+  });
+
+  server.on("error", (err) => {
+    if (err && err.code === "EADDRINUSE") {
+      // Se o usuário não fixou PORT, tenta automaticamente a próxima porta.
+      const portWasExplicit = !!process.env.PORT;
+      if (!portWasExplicit && port < 65535) {
+        console.error(`\n⚠️  Porta ${port} já está em uso. Tentando ${port + 1}...`);
+        return startServer(port + 1);
+      }
+
+      console.error(`\n❌ Porta ${port} já está em uso.`);
+      console.error(`   Dica: feche o processo que está usando a porta ou rode com PORT diferente.`);
+      console.error(`   Ex.: PORT=5001 npm start\n`);
+      process.exit(1);
+    }
+
+    console.error("\n❌ Erro ao iniciar o servidor:", err?.message || err);
+    process.exit(1);
+  });
+}
+
+startServer(PORT);

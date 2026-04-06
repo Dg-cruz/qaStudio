@@ -825,6 +825,8 @@
 
     let testCount = 0;
 
+    const ANALYZER_STATE_KEY = 'k6suite:analyzerState';
+
     const PEND_ORDER = 'k6suite:pendOrder';
     const PEND_ITEM_PREFIX = 'k6suite:pend:';
     const LEGACY_PENDING_KEY = 'k6suite:pendingSummaries';
@@ -915,6 +917,76 @@
       setTimeout(() => t.classList.remove('show'), 3000);
     }
 
+    function serializeCards() {
+      const cards = document.querySelectorAll('.test-card');
+      const items = [];
+      cards.forEach(card => {
+        const label = card.querySelector('.card-title-input')?.value || 'Teste sem nome';
+        const paste = card.querySelector('.paste-input')?.value || '';
+        const metrics = {};
+        card.querySelectorAll('.metric-input').forEach(input => {
+          const k = input.dataset.key;
+          if (!k) return;
+          const v = input.value?.trim();
+          if (v) metrics[k] = v;
+        });
+        // Salva mesmo sem metrics para preservar o card (ex.: recém importado)
+        items.push({ label, paste, metrics });
+      });
+      return items;
+    }
+
+    function saveAnalyzerState() {
+      try {
+        localStorage.setItem(ANALYZER_STATE_KEY, JSON.stringify({ version: 1, items: serializeCards() }));
+      } catch {}
+    }
+
+    let saveTimer = null;
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveAnalyzerState, 150);
+    }
+
+    function restoreAnalyzerState() {
+      try {
+        const raw = localStorage.getItem(ANALYZER_STATE_KEY);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        const items = parsed?.items;
+        if (!Array.isArray(items) || items.length === 0) return false;
+
+        // Limpa cards atuais (se houver) para não duplicar ao restaurar
+        const container = document.getElementById('tests-container');
+        container.innerHTML = '';
+        testCount = 0;
+
+        items.forEach((it) => {
+          addTest();
+          const card = document.getElementById(`test-${testCount}`);
+          if (!card) return;
+          const title = card.querySelector('.card-title-input');
+          const ta = card.querySelector('.paste-input');
+          if (title) title.value = it?.label || `Teste ${testCount}`;
+          if (ta) ta.value = it?.paste || '';
+          // Preenche métricas (se houver)
+          if (it?.metrics && typeof it.metrics === 'object') {
+            card.querySelectorAll('.metric-input').forEach(inp => {
+              const k = inp.dataset.key;
+              if (k && it.metrics[k] != null) inp.value = String(it.metrics[k]);
+            });
+          }
+          // Se veio paste, tenta parsear para alinhar métricas e gráficos
+          if (ta && ta.value.trim()) parseAndFill(ta);
+        });
+
+        updateCharts();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     function addTest() {
       testCount++;
       const container = document.getElementById('tests-container');
@@ -941,7 +1013,7 @@
 
       card.innerHTML = `
         <div class="card-header">
-          <input type="text" class="card-title-input" placeholder="Nome do teste (ex: v1.0.0)" value="Teste ${testCount}" oninput="onMetricInput()" />
+          <input type="text" class="card-title-input" placeholder="Nome do teste (ex: v1.0.0)" value="Teste ${testCount}" oninput="onMetricInput(); scheduleSave()" />
           <button class="remove-btn" onclick="removeTest(${testCount})" title="Remover teste">×</button>
         </div>
         <div class="paste-area">
@@ -949,7 +1021,7 @@
             <span class="paste-label-text">⚡ Dados</span>
             <span class="paste-label-hint">Cole o output do K6 para preencher automaticamente</span>
           </div>
-          <textarea class="paste-input" placeholder="Cole aqui o resumo gerado pelo handleSummary do K6..." oninput="parseAndFill(this)"></textarea>
+          <textarea class="paste-input" placeholder="Cole aqui o resumo gerado pelo handleSummary do K6..." oninput="parseAndFill(this); scheduleSave()"></textarea>
           <div class="paste-feedback" id="paste-feedback-${testCount}"></div>
         </div>
         ${metricsHtml}
@@ -976,6 +1048,7 @@
       });
 
       clearPendingQueueStorage();
+      saveAnalyzerState();
       showToast(`✓ Importado${list.length > 1 ? 's' : ''} ${list.length} teste${list.length > 1 ? 's' : ''} do Runner`);
       return true;
     }
@@ -987,7 +1060,7 @@
         card.style.opacity = '0';
         card.style.transform = 'scale(0.95)';
         card.style.transition = 'all 0.2s';
-        setTimeout(() => { card.remove(); updateCharts(); }, 200);
+        setTimeout(() => { card.remove(); updateCharts(); saveAnalyzerState(); }, 200);
       }
     }
 
@@ -1022,7 +1095,87 @@
         .replace(/<p><\/p>/g, '');
     }
 
-    function onMetricInput() { updateCharts(); }
+    function onMetricInput() { updateCharts(); scheduleSave(); }
+
+    let pendingChartResults = null;
+    let chartRenderQueued = false;
+    function queueChartRender(results) {
+      pendingChartResults = results;
+      if (chartRenderQueued) return;
+      chartRenderQueued = true;
+
+      function ensureCanvasSized(id) {
+        const canvas = document.getElementById(id);
+        if (!canvas) return null;
+        const parent = canvas.closest('.chart-body') || canvas.parentElement;
+        if (!parent) return canvas;
+
+        // Garante que o canvas ocupe o espaço do container (evita 0x0)
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+
+        const rect = parent.getBoundingClientRect();
+        const w = Math.max(1, Math.floor(rect.width));
+        const h = Math.max(1, Math.floor(rect.height));
+        const ratio = window.devicePixelRatio || 1;
+
+        const targetW = Math.floor(w * ratio);
+        const targetH = Math.floor(h * ratio);
+
+        if (canvas.width !== targetW) canvas.width = targetW;
+        if (canvas.height !== targetH) canvas.height = targetH;
+        return canvas;
+      }
+
+      const run = () => {
+        chartRenderQueued = false;
+        const r = pendingChartResults;
+        pendingChartResults = null;
+        if (!r) return;
+
+        // Garante que o layout esteja calculado (Chart.js quebra quando canvas nasce oculto)
+        try {
+          ensureCanvasSized('chart-latency');
+          ensureCanvasSized('chart-reliability');
+          renderLatencyChart(r);
+          renderReliabilityChart(r);
+          latencyChart?.resize?.();
+          reliabilityChart?.resize?.();
+          latencyChart?.update?.();
+          reliabilityChart?.update?.();
+          // Alguns navegadores ainda estabilizam layout/fonte depois: tenta novamente
+          setTimeout(() => {
+            try {
+              ensureCanvasSized('chart-latency');
+              ensureCanvasSized('chart-reliability');
+              latencyChart?.resize?.();
+              reliabilityChart?.resize?.();
+              latencyChart?.update?.();
+              reliabilityChart?.update?.();
+            } catch {}
+          }, 60);
+        } catch (e) {
+          console.error('Erro ao renderizar gráficos:', e);
+          showToast('❌ Falha ao renderizar gráficos (veja o console)');
+        }
+      };
+
+      // 2 frames: display->layout->canvas size
+      requestAnimationFrame(() => requestAnimationFrame(run));
+    }
+
+    function toNumber(val) {
+      if (val == null) return null;
+      const s = String(val).trim();
+      if (!s) return null;
+      // Suporta pt-BR ("1.234,56") e en-US ("1234.56")
+      const cleaned = s.replace(/%/g, '').trim();
+      const normalized = cleaned.includes(',')
+        ? cleaned.replace(/\./g, '').replace(',', '.')
+        : cleaned;
+      const n = Number.parseFloat(normalized);
+      return Number.isFinite(n) ? n : null;
+    }
 
     function updateCharts() {
       const results = collectResults();
@@ -1035,20 +1188,21 @@
       }
 
       document.getElementById('charts-section').style.display = 'block';
-      renderLatencyChart(results);
-      renderReliabilityChart(results);
+      queueChartRender(results);
     }
 
     function renderLatencyChart(results) {
       const labels = results.map(r => r.label);
       const datasets = [
-        { label: 'avg', data: results.map(r => parseFloat(r.metrics.http_req_duration_avg) || null), backgroundColor: 'rgba(0,229,255,0.7)', borderColor: '#00e5ff', borderWidth: 1, borderRadius: 4 },
-        { label: 'p90', data: results.map(r => parseFloat(r.metrics.http_req_duration_p90) || null), backgroundColor: 'rgba(124,58,237,0.7)', borderColor: '#7c3aed', borderWidth: 1, borderRadius: 4 },
-        { label: 'p95', data: results.map(r => parseFloat(r.metrics.http_req_duration_p95) || null), backgroundColor: 'rgba(245,158,11,0.7)', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 4 },
-        { label: 'p99', data: results.map(r => parseFloat(r.metrics.http_req_duration_p99) || null), backgroundColor: 'rgba(239,68,68,0.7)', borderColor: '#ef4444', borderWidth: 1, borderRadius: 4 },
+        { label: 'avg', data: results.map(r => toNumber(r.metrics.http_req_duration_avg)), backgroundColor: 'rgba(0,229,255,0.7)', borderColor: '#00e5ff', borderWidth: 1, borderRadius: 4 },
+        { label: 'p90', data: results.map(r => toNumber(r.metrics.http_req_duration_p90)), backgroundColor: 'rgba(124,58,237,0.7)', borderColor: '#7c3aed', borderWidth: 1, borderRadius: 4 },
+        { label: 'p95', data: results.map(r => toNumber(r.metrics.http_req_duration_p95)), backgroundColor: 'rgba(245,158,11,0.7)', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 4 },
+        { label: 'p99', data: results.map(r => toNumber(r.metrics.http_req_duration_p99)), backgroundColor: 'rgba(239,68,68,0.7)', borderColor: '#ef4444', borderWidth: 1, borderRadius: 4 },
       ].filter(ds => ds.data.some(v => v !== null));
 
-      const ctx = document.getElementById('chart-latency').getContext('2d');
+      const canvas = document.getElementById('chart-latency');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
       if (latencyChart) latencyChart.destroy();
       latencyChart = new Chart(ctx, {
         type: 'bar', data: { labels, datasets },
@@ -1078,12 +1232,19 @@
 
     function renderReliabilityChart(results) {
       const labels = results.map(r => r.label);
-      const ctx = document.getElementById('chart-reliability').getContext('2d');
+      const canvas = document.getElementById('chart-reliability');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
       if (reliabilityChart) reliabilityChart.destroy();
 
-      const rpsData = results.map(r => parseFloat(r.metrics.http_req_rate) || null);
-      const errorData = results.map(r => parseFloat(r.metrics.http_req_failed) || null);
-      const checksData = results.map(r => { const v = parseFloat(r.metrics.checks); return isNaN(v) ? null : parseFloat((100-v).toFixed(2)); });
+      const rpsData = results.map(r => toNumber(r.metrics.http_req_rate));
+      const errorData = results.map(r => toNumber(r.metrics.http_req_failed));
+      const checksData = results.map(r => {
+        const v = toNumber(r.metrics.checks);
+        if (v == null) return null;
+        const errPct = Number.isFinite(v) ? Number.parseFloat((100 - v).toFixed(2)) : null;
+        return Number.isFinite(errPct) ? errPct : null;
+      });
 
       const datasets = [];
       if (rpsData.some(v => v !== null)) datasets.push({ label: 'RPS', data: rpsData, backgroundColor: 'rgba(16,185,129,0.7)', borderColor: '#10b981', borderWidth: 1, borderRadius: 4, yAxisID: 'yRPS' });
@@ -1178,6 +1339,7 @@
         feedbackEl.className = 'paste-feedback';
         card.querySelectorAll('.metric-input').forEach(inp => inp.value = '');
         updateCharts();
+        scheduleSave();
         return;
       }
 
@@ -1204,6 +1366,7 @@
         feedbackEl.className = 'paste-feedback warn';
       }
       updateCharts();
+      scheduleSave();
     }
 
     function exportPDF() {
@@ -1255,8 +1418,12 @@
     // Se houver import pendente, cria cards para cada rodada.
     // Caso contrário, cria 1 card vazio inicial.
     setTimeout(() => {
+      const restored = restoreAnalyzerState();
       const imported = importPendingFromRunner();
-      if (!imported) addTest();
+      if (!restored && !imported) addTest();
+      // Se importou novos cards, garante que gráficos reflitam o estado atual.
+      updateCharts();
+      saveAnalyzerState();
     }, 0);
   </script>
 </body>
