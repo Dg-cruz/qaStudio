@@ -304,6 +304,9 @@
     /* ── STATUS PILL ── */
     .status-bar {
       display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
       gap: 16px;
       margin-bottom: 48px;
       opacity: 0;
@@ -331,6 +334,20 @@
       border-color: rgba(239,68,68,0.25);
       color: #ef4444;
       background: rgba(239,68,68,0.05);
+    }
+
+    .pill-wiki {
+      border-color: rgba(124,58,237,0.35);
+      color: #a78bfa;
+      background: rgba(124,58,237,0.08);
+      text-decoration: none;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s, color 0.2s;
+    }
+    .pill-wiki:hover {
+      border-color: rgba(124,58,237,0.55);
+      color: #c4b5fd;
+      box-shadow: 0 0 20px rgba(124,58,237,0.12);
     }
 
     .pill-dot {
@@ -380,6 +397,7 @@
         <div class="pill-dot"></div>
         <span id="k6-status-text">Verificando k6...</span>
       </div>
+      <a href="/wiki" class="pill pill-wiki" title="Documentação e guias do projeto">📖 Wiki</a>
     </div>
 
     <div class="cards">

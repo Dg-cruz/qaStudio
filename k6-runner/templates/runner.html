@@ -1004,6 +1004,7 @@
       let method = 'GET';
       const headers = {};
       let body = '';
+      const urlencodedParts = [];
       let url = '';
 
       while (i < tokens.length) {
@@ -1029,6 +1030,29 @@
         }
         if (tl === '-d' || tl === '--data' || tl === '--data-raw' || tl === '--data-binary') {
           if (i + 1 < tokens.length) body = tokens[i + 1];
+          i += 2;
+          continue;
+        }
+        if (tl === '--data-urlencode') {
+          if (i + 1 >= tokens.length) { i++; continue; }
+          const arg = String(tokens[i + 1] ?? '');
+          // Formatos comuns:
+          // - "key=value"
+          // - "key" (valor vazio)
+          // - "key@file" (não suportado)
+          const atIdx = arg.indexOf('@');
+          if (atIdx > 0) {
+            // key@file não suportado
+            urlencodedParts.push(null);
+          } else {
+            const eq = arg.indexOf('=');
+            const k = (eq >= 0 ? arg.slice(0, eq) : arg).trim();
+            const vRaw = eq >= 0 ? arg.slice(eq + 1) : '';
+            const v = vRaw == null ? '' : String(vRaw);
+            if (k) {
+              urlencodedParts.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+            }
+          }
           i += 2;
           continue;
         }
@@ -1060,6 +1084,20 @@
       }
 
       if (!url) return { error: 'Não encontrei URL (http/https) no curl.' };
+
+      if (!body && urlencodedParts.length) {
+        if (urlencodedParts.some(p => p === null)) {
+          return { error: 'Body via --data-urlencode com @arquivo não é suportado; cole os campos manualmente.' };
+        }
+        body = urlencodedParts.join('&');
+        if (method === 'GET') method = 'POST';
+        if (!Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) {
+          headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        }
+      } else if (body && method === 'GET') {
+        // Se tem body em -d/--data e método não foi setado, curl normalmente vira POST
+        method = 'POST';
+      }
 
       let token = '';
       const authKey = Object.keys(headers).find((k) => k.toLowerCase() === 'authorization');

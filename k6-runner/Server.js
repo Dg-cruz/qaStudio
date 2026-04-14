@@ -1,14 +1,17 @@
-// Compatibilidade: alguns ambientes/sistemas de arquivos diferenciam maiúsculas.
-// Mantemos `Server.js` como fonte, mas expomos `server.js` como entrypoint padrão.
-require("./Server.js");
+import express from "express";
+import "dotenv/config";
 
-const express = require("express");
-const { spawn, execSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
-const http = require("http");
-const https = require("https");
-const { v4: uuidv4 } = require("uuid");
+import { spawn, execSync } from "child_process";
+import fs from "fs";
+import path from "path";
+import http from "http";
+import https from "https";
+import { v4 as uuidv4 } from "uuid";
+import { fileURLToPath } from "url";
+
+// equivalente ao __dirname no ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -18,7 +21,6 @@ app.use(express.static(path.join(__dirname, "static")));
 
 const TMP_DIR = path.join(__dirname, "tmp");
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
-
 // ── K6 check ──────────────────────────────────────────────────────────────
 function isK6Installed() {
   try { execSync("k6 version", { stdio: "pipe" }); return true; } catch { return false; }
@@ -363,6 +365,9 @@ export function handleSummary(data) {
 app.get("/",         (req, res) => res.sendFile(path.join(__dirname, "templates", "home.html")));
 app.get("/runner",   (req, res) => res.sendFile(path.join(__dirname, "templates", "runner.html")));
 app.get("/analyzer", (req, res) => res.sendFile(path.join(__dirname, "templates", "analyzer.html")));
+app.get("/wiki",     (req, res) => res.sendFile(path.join(__dirname, "templates", "wiki.html")));
+app.use("/wiki-docs", express.static(path.join(__dirname, "docs", "wiki"), { dotfiles: "deny", index: false }));
+app.use("/docs",      express.static(path.join(__dirname, "docs"), { dotfiles: "deny", index: false }));
 app.get("/api/k6-status", (req, res) => res.json({ installed: isK6Installed(), simulator: !isK6Installed() }));
 
 // ── Run test ──────────────────────────────────────────────────────────────
@@ -435,50 +440,92 @@ app.post("/analyze", async (req, res) => {
   const metricsText = results.map(r => `### ${r.label}\n${Object.entries(r.metrics).map(([k,v]) => `  ${k}: ${v}`).join("\n")}`).join("\n\n");
   const isComparison = results.length > 1;
   const prompt = isComparison
-    ? `Você é um especialista em performance de sistemas e testes de carga com k6. Analise e COMPARE:\n\n${metricsText}\n\nForneça: 1) Comparação direta 2) Análise de latência 3) Throughput e confiabilidade 4) Problemas 5) Recomendações 6) Conclusão. Use markdown com ## para seções.`
-    : `Você é um especialista em performance de sistemas e testes de carga com k6. Analise:\n\n${metricsText}\n\nForneça: 1) Resumo geral 2) Análise de latência 3) Throughput e confiabilidade 4) Problemas e severidade 5) Recomendações 6) Veredicto: pronto para produção? Use markdown com ## para seções.`;
+    ? `Você é um especialista em performance de sistemas e testes de carga com k6. Analise e COMPARE:\n\n${metricsText}\n\nForneça: 1) Comparação direta 2) Análise de latência 3) Throughput e confiabilidade 4) Problemas 5) Recomendações 6) Conclusão. Use markdown com ## para seções. Inclua uma seção ## Configuração de Testes Sugerida com um exemplo de script k6 em bloco de código javascript.`
+    : `Você é um especialista em performance de sistemas e testes de carga com k6. Analise:\n\n${metricsText}\n\nForneça: 1) Resumo geral 2) Análise de latência 3) Throughput e confiabilidade 4) Problemas e severidade 5) Recomendações 6) Veredicto: pronto para produção? Use markdown com ## para seções. Inclua uma seção ## Configuração de Testes Sugerida com um exemplo de script k6 em bloco de código javascript.`;
 
-  try {
+  const callAPI = async () => {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
+    return response;
+  };
+
+  try {
+    let response = await callAPI();
+
+    // Retry automático se overloaded (529) ou rate limit (529/529)
+    if (response.status === 529 || response.status === 503) {
+      console.log("⚠️  API sobrecarregada, aguardando 5s e tentando novamente...");
+      await new Promise(r => setTimeout(r, 5000));
+      response = await callAPI();
+    }
+
     const data = await response.json();
-    res.json({ analysis: data.content?.[0]?.text || "Não foi possível gerar análise." });
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: data.error?.message || "Erro na API da Anthropic",
+        details: data
+      });
+    }
+
+    const text = data.content?.[0]?.text;
+    res.json({ analysis: text || "Não foi possível gerar análise." });
+
   } catch (err) {
     res.status(500).json({ error: "Falha ao chamar API de análise: " + err.message });
   }
 });
 
 function startServer(port) {
-  const server = app.listen(port, () => {
+  const server = app.listen(port, () => {  // ← server declarado aqui fora
     const k6Ok = isK6Installed();
     console.log(`\n🚀 K6 Suite rodando em http://127.0.0.1:${port}`);
     console.log(`   Home      → http://127.0.0.1:${port}/`);
     console.log(`   Runner    → http://127.0.0.1:${port}/runner`);
     console.log(`   Analyzer  → http://127.0.0.1:${port}/analyzer`);
     console.log(`\n   k6 instalado : ${k6Ok ? "✅ Sim (modo real)" : "⚠️  Não (modo simulador ativo)"}\n`);
-  });
+    console.log("API KEY carregada:", process.env.ANTHROPIC_API_KEY ? "✅ OK" : "❌ undefined"); // debug
+  }); // ← fecha o app.listen aqui
 
   server.on("error", (err) => {
     if (err && err.code === "EADDRINUSE") {
-      // Se o usuário não fixou PORT, tenta automaticamente a próxima porta.
       const portWasExplicit = !!process.env.PORT;
       if (!portWasExplicit && port < 65535) {
         console.error(`\n⚠️  Porta ${port} já está em uso. Tentando ${port + 1}...`);
         return startServer(port + 1);
       }
-
       console.error(`\n❌ Porta ${port} já está em uso.`);
-      console.error(`   Dica: feche o processo que está usando a porta ou rode com PORT diferente.`);
-      console.error(`   Ex.: PORT=5001 npm start\n`);
       process.exit(1);
     }
-
     console.error("\n❌ Erro ao iniciar o servidor:", err?.message || err);
     process.exit(1);
   });
+
+  return server; // ← return aqui fora, não dentro do callback
 }
 
-startServer(PORT);
+const server = startServer(PORT);
+
+// ← handlers DEPOIS da declaração do server
+process.on("SIGINT", () => {
+  console.log("\n🛑 Encerrando servidor...");
+  server.close(() => {
+    console.log("✅ Servidor encerrado.");
+    process.exit(0);
+  });
+});
+
+process.on("SIGTERM", () => {
+  server.close(() => process.exit(0));
+});

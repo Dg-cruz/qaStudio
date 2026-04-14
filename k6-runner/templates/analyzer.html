@@ -395,6 +395,17 @@
     }
     .btn-export:hover { background: rgba(16,185,129,0.08); transform: translateY(-1px); }
 
+    .btn-clear {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .btn-clear:hover {
+      border-color: rgba(239,68,68,0.45);
+      color: var(--danger);
+      background: rgba(239,68,68,0.06);
+    }
+
     #charts-section {
       display: none;
       margin-bottom: 40px;
@@ -620,6 +631,23 @@
       #tests-container { grid-template-columns: 1fr; }
       .metrics-grid { grid-template-columns: 1fr; }
     }
+
+    .result-body pre {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.result-body pre code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  line-height: 1.6;
+  white-space: pre;
+}
   </style>
 </head>
 <body>
@@ -656,13 +684,16 @@
     <div id="tests-container"></div>
 
     <div class="actions-row">
-      <button class="btn btn-ghost" onclick="addTest()">
+      <button class="btn btn-ghost" type="button" onclick="addTest()">
         <span>＋</span> Adicionar Teste
+      </button>
+      <button class="btn btn-clear" type="button" onclick="clearAnalyzerScreen()">
+        <span>⌧</span> Limpar
       </button>
       <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()">
         <span>✦</span> Analisar com IA
       </button>
-      <button class="btn btn-export" id="export-btn" onclick="exportPDF()" style="display:none">
+      <button class="btn btn-export" type="button" id="export-btn" onclick="exportPDF()" style="display:none">
         <span>↓</span> Exportar PDF
       </button>
     </div>
@@ -1064,6 +1095,45 @@
       }
     }
 
+    function clearAnalyzerScreen() {
+      const container = document.getElementById('tests-container');
+      container.innerHTML = '';
+      testCount = 0;
+
+      try { localStorage.removeItem(ANALYZER_STATE_KEY); } catch {}
+
+      if (latencyChart) {
+        try { latencyChart.destroy(); } catch {}
+        latencyChart = null;
+      }
+      if (reliabilityChart) {
+        try { reliabilityChart.destroy(); } catch {}
+        reliabilityChart = null;
+      }
+
+      document.getElementById('charts-section').style.display = 'none';
+      document.getElementById('results-section').style.display = 'none';
+      document.getElementById('export-btn').style.display = 'none';
+      document.getElementById('result-body').innerHTML = '';
+      document.getElementById('result-title').textContent = 'Análise de Performance K6';
+      document.getElementById('loading-state').style.display = 'none';
+
+      const pdfHeader = document.getElementById('pdf-header');
+      const pdfTable = document.getElementById('pdf-metrics-table');
+      const pdfMeta = document.getElementById('pdf-meta');
+      if (pdfHeader) pdfHeader.style.display = 'none';
+      if (pdfTable) {
+        pdfTable.style.display = 'none';
+        pdfTable.innerHTML = '';
+      }
+      if (pdfMeta) pdfMeta.innerHTML = '';
+
+      addTest();
+      updateCharts();
+      saveAnalyzerState();
+      showToast('✓ Tela limpa — um teste vazio foi criado');
+    }
+
     function collectResults() {
       const cards = document.querySelectorAll('.test-card');
       const results = [];
@@ -1081,19 +1151,21 @@
     // (showToast movido para cima para ser reutilizado no import)
 
     function parseMarkdown(text) {
-      return text
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/^---$/gm, '<hr>')
-        .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/^(?!<[hul]|<hr)(.+)$/gm, '<p>$1</p>')
-        .replace(/<p><\/p>/g, '');
-    }
+  return text
+    // ← adicione esta linha ANTES das outras substituições
+    .replace(/```(\w+)?\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<[hul]|<hr)(.+)$/gm, '<p>$1</p>')
+    .replace(/<p><\/p>/g, '');
+}
 
     function onMetricInput() { updateCharts(); scheduleSave(); }
 

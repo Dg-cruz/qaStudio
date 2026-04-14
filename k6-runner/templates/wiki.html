@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Wiki — índice | K6 Suite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700&family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #03050a;
+      --surface: #080d18;
+      --border: #0f1d35;
+      --accent: #00e5ff;
+      --accent2: #7c3aed;
+      --accent3: #10b981;
+      --text: #dde6f0;
+      --muted: #4a6080;
+      --mono: 'Space Mono', monospace;
+      --display: 'Bebas Neue', sans-serif;
+      --body: 'DM Sans', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+    }
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.02) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand {
+      font-family: var(--display);
+      font-size: 22px;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #fff, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-decoration: none;
+    }
+    .nav-back {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .nav-back:hover { color: var(--text); }
+    .path-note {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+      word-break: break-all;
+    }
+    #content {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 32px 36px;
+    }
+    #content.loading, #content.error {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    #content.error { color: #f87171; }
+    .doc-body h1 {
+      font-family: var(--display);
+      font-size: clamp(28px, 5vw, 40px);
+      letter-spacing: 1px;
+      color: var(--accent);
+      margin-bottom: 16px;
+      line-height: 1.1;
+    }
+    .doc-body h2 {
+      font-family: var(--body);
+      font-size: 15px;
+      font-weight: 600;
+      color: #a78bfa;
+      margin: 28px 0 12px;
+      letter-spacing: 0.02em;
+    }
+    .doc-body h2:first-of-type { margin-top: 8px; }
+    .doc-body p {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #b8c5d9;
+      margin-bottom: 14px;
+    }
+    .doc-body ol {
+      padding-left: 22px;
+      margin: 12px 0 20px;
+    }
+    .doc-body li {
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .doc-body a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(0,229,255,0.25);
+    }
+    .doc-body a:hover {
+      color: #7cfbfd;
+      border-bottom-color: rgba(0,229,255,0.5);
+    }
+    .doc-body hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 24px 0;
+    }
+    .doc-body strong { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="wrap">
+    <nav>
+      <a href="/" class="nav-brand">K6 SUITE</a>
+      <a href="/" class="nav-back">← Voltar à home</a>
+    </nav>
+    <p class="path-note">Conteúdo de <span style="color:var(--accent3)">docs/wiki/indice.md</span> no projeto k6-runner</p>
+    <div id="content" class="loading">Carregando o índice…</div>
+  </div>
+  <script>
+    function rewriteWikiLinks(md) {
+      return md
+        .replace(/\]\(\.\/([^)]+)\)/g, '](/wiki-docs/$1)')
+        .replace(/\]\(\.\.\/([^)]+)\)/g, '](/docs/$1)');
+    }
+
+    const el = document.getElementById('content');
+
+    fetch('/wiki-docs/indice.md')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (text) {
+        const md = rewriteWikiLinks(text);
+        if (typeof marked === 'undefined' || !marked.parse) {
+          el.className = 'error';
+          el.textContent = 'Não foi possível carregar o motor Markdown.';
+          return;
+        }
+        el.className = 'doc-body';
+        el.innerHTML = marked.parse(md);
+      })
+      .catch(function () {
+        el.className = 'error';
+        el.textContent = 'Não foi possível carregar indice.md. Verifique se o servidor está a correr e se o ficheiro existe em docs/wiki/.';
+      });
+  </script>
+</body>
+</html>
